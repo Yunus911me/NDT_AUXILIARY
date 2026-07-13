@@ -1,0 +1,271 @@
+/**
+ * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
+ * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * @cliArgs --device "F28002x" --part "F28002x_80QFP" --package "80QFP" --context "system" --product "C2000WARE@26.00.00.00"
+ * @v2CliArgs --device "TMS320F280025" --package "80QFP" --context "system" --product "C2000WARE@26.00.00.00"
+ * @versions {"tool":"1.27.0+4565"}
+ */
+
+/**
+ * Import the modules used in this configuration.
+ */
+const adc            = scripting.addModule("/driverlib/adc.js", {}, false);
+const adc1           = adc.addInstance();
+const adc2           = adc.addInstance();
+const analog         = scripting.addModule("/driverlib/analog.js", {}, false);
+const analog1        = analog.addInstance();
+const device_support = scripting.addModule("/driverlib/device_support.js");
+const gpio           = scripting.addModule("/driverlib/gpio.js", {}, false);
+const gpio1          = gpio.addInstance();
+const gpio2          = gpio.addInstance();
+const gpio3          = gpio.addInstance();
+const gpio4          = gpio.addInstance();
+const gpio5          = gpio.addInstance();
+const gpio6          = gpio.addInstance();
+const gpio7          = gpio.addInstance();
+const gpio8          = gpio.addInstance();
+const gpio9          = gpio.addInstance();
+const gpio10         = gpio.addInstance();
+const gpio11         = gpio.addInstance();
+const gpio12         = gpio.addInstance();
+const gpio13         = gpio.addInstance();
+const gpio14         = gpio.addInstance();
+const gpio15         = gpio.addInstance();
+const gpio16         = gpio.addInstance();
+const gpio17         = gpio.addInstance();
+const gpio18         = gpio.addInstance();
+const gpio19         = gpio.addInstance();
+const gpio20         = gpio.addInstance();
+const gpio21         = gpio.addInstance();
+const gpio22         = gpio.addInstance();
+const gpio23         = gpio.addInstance();
+const gpio24         = gpio.addInstance();
+const gpio25         = gpio.addInstance();
+const gpio26         = gpio.addInstance();
+const gpio27         = gpio.addInstance();
+const gpio28         = gpio.addInstance();
+const gpio29         = gpio.addInstance();
+const i2c            = scripting.addModule("/driverlib/i2c.js", {}, false);
+const i2c1           = i2c.addInstance();
+const i2c2           = i2c.addInstance();
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+adc1.$name               = "myADCA";
+adc1.adcClockPrescaler   = "ADC_CLK_DIV_2_0";
+adc1.enabledSOCs         = ["ADC_SOC_NUMBER0","ADC_SOC_NUMBER1","ADC_SOC_NUMBER2","ADC_SOC_NUMBER3","ADC_SOC_NUMBER4","ADC_SOC_NUMBER5","ADC_SOC_NUMBER6","ADC_SOC_NUMBER7","ADC_SOC_NUMBER8"];
+adc1.soc0Channel         = "ADC_CH_ADCIN6";
+adc1.soc1Channel         = "ADC_CH_ADCIN3";
+adc1.soc2Channel         = "ADC_CH_ADCIN2";
+adc1.soc3Channel         = "ADC_CH_ADCIN9";
+adc1.soc0Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc1.soc1Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc1.soc2Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc1.soc3Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc1.soc0SampleWindow    = 15;
+adc1.soc1SampleWindow    = 15;
+adc1.soc2SampleWindow    = 15;
+adc1.soc3SampleWindow    = 15;
+adc1.soc4Channel         = "ADC_CH_ADCIN12";
+adc1.soc5Channel         = "ADC_CH_ADCIN5";
+adc1.soc6Channel         = "ADC_CH_ADCIN1";
+adc1.soc7Channel         = "ADC_CH_ADCIN11";
+adc1.soc4SampleWindow    = 64;
+adc1.soc5SampleWindow    = 64;
+adc1.soc6SampleWindow    = 64;
+adc1.soc7SampleWindow    = 64;
+adc1.soc8SampleWindow    = 64;
+adc1.enableInterrupt1    = true;
+adc1.interrupt1SOCSource = "ADC_SOC_NUMBER3";
+adc1.enableInterrupt2    = true;
+adc1.interrupt2SOCSource = "ADC_SOC_NUMBER8";
+
+adc2.$name               = "myADCC";
+adc2.adcBase             = "ADCC_BASE";
+adc2.adcClockPrescaler   = "ADC_CLK_DIV_2_0";
+adc2.enabledSOCs         = ["ADC_SOC_NUMBER0","ADC_SOC_NUMBER1","ADC_SOC_NUMBER2","ADC_SOC_NUMBER3"];
+adc2.soc0Channel         = "ADC_CH_ADCIN6";
+adc2.soc1Channel         = "ADC_CH_ADCIN14";
+adc2.soc2Channel         = "ADC_CH_ADCIN11";
+adc2.soc3Channel         = "ADC_CH_ADCIN10";
+adc2.soc0Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc2.soc1Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc2.soc2Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc2.soc3Trigger         = "ADC_TRIGGER_EPWM1_SOCA";
+adc2.soc0SampleWindow    = 15;
+adc2.soc1SampleWindow    = 15;
+adc2.soc2SampleWindow    = 15;
+adc2.soc3SampleWindow    = 15;
+adc2.enableInterrupt1    = true;
+adc2.interrupt1SOCSource = "ADC_SOC_NUMBER3";
+
+adc1.analog                             = analog1;
+adc2.analog                             = analog1;
+analog1.$name                           = "myANALOGPinMux0";
+analog1.analog["a0/c15Pin"].$assign     = "A0/C15";
+analog1.analog.a1Pin.$assign            = "A1";
+analog1.analog["a10/c10Pin"].$assign    = "A10/C10";
+analog1.analog["a11/c0Pin"].$assign     = "A11/C0";
+analog1.analog["a12/c1Pin"].$assign     = "A12/C1";
+analog1.analog["a2/c9Pin"].$assign      = "A2/C9";
+analog1.analog["a3/c5/vdacPin"].$assign = "A3/C5/VDAC";
+analog1.analog["a4/c14Pin"].$assign     = "A4/C14";
+analog1.analog["a5/c2Pin"].$assign      = "A5/C2";
+analog1.analog.a6Pin.$assign            = "A6";
+analog1.analog["a8/c11Pin"].$assign     = "A8/C11";
+analog1.analog["a9/c8Pin"].$assign      = "A9/C8";
+analog1.analog.c6Pin.$assign            = "C6";
+
+const multiplier1         = system.clockTree["PLL_IMULT"];
+multiplier1.multiplyValue = 25;
+
+const mux4       = system.clockTree["XTAL_OR_X1"];
+mux4.inputSelect = "X1";
+
+const pinFunction1     = system.clockTree["X1"];
+pinFunction1.XTAL_Freq = 16;
+
+const pinFunction2     = system.clockTree["XTAL"];
+pinFunction2.XTAL_Freq = 16;
+
+gpio1.direction       = "GPIO_DIR_MODE_OUT";
+gpio1.$name           = "CH5_B_MCU";
+gpio1.gpioPin.$assign = "GPIO0";
+
+gpio2.direction       = "GPIO_DIR_MODE_OUT";
+gpio2.$name           = "CH5_A_MCU";
+gpio2.gpioPin.$assign = "GPIO1";
+
+gpio3.direction       = "GPIO_DIR_MODE_OUT";
+gpio3.$name           = "CH4_A_MCU";
+gpio3.gpioPin.$assign = "GPIO5";
+
+gpio4.direction       = "GPIO_DIR_MODE_OUT";
+gpio4.$name           = "CH4_B_MCU";
+gpio4.gpioPin.$assign = "GPIO45";
+
+gpio5.direction       = "GPIO_DIR_MODE_OUT";
+gpio5.$name           = "CH1_A_MCU";
+gpio5.gpioPin.$assign = "GPIO6";
+
+gpio6.direction       = "GPIO_DIR_MODE_OUT";
+gpio6.$name           = "CH1_B_MCU";
+gpio6.gpioPin.$assign = "GPIO14";
+
+gpio7.direction       = "GPIO_DIR_MODE_OUT";
+gpio7.$name           = "CH2_A_MCU";
+gpio7.gpioPin.$assign = "GPIO15";
+
+gpio8.direction       = "GPIO_DIR_MODE_OUT";
+gpio8.$name           = "CH2_B_MCU";
+gpio8.gpioPin.$assign = "GPIO34";
+
+gpio9.direction       = "GPIO_DIR_MODE_OUT";
+gpio9.$name           = "CH6_B_MCU";
+gpio9.gpioPin.$assign = "GPIO23";
+
+gpio10.direction       = "GPIO_DIR_MODE_OUT";
+gpio10.$name           = "CH6_A_MCU";
+gpio10.gpioPin.$assign = "GPIO40";
+
+gpio11.direction       = "GPIO_DIR_MODE_OUT";
+gpio11.$name           = "CH7_A_MCU";
+gpio11.gpioPin.$assign = "GPIO41";
+
+gpio12.direction       = "GPIO_DIR_MODE_OUT";
+gpio12.$name           = "CH7_B_MCU";
+gpio12.gpioPin.$assign = "GPIO22";
+
+gpio13.direction       = "GPIO_DIR_MODE_OUT";
+gpio13.$name           = "CH8_A_MCU";
+gpio13.gpioPin.$assign = "GPIO7";
+
+gpio14.direction       = "GPIO_DIR_MODE_OUT";
+gpio14.$name           = "CH3_B_MCU";
+gpio14.gpioPin.$assign = "GPIO9";
+
+gpio15.direction       = "GPIO_DIR_MODE_OUT";
+gpio15.$name           = "CH3_A_MCU";
+gpio15.gpioPin.$assign = "GPIO10";
+
+gpio16.direction       = "GPIO_DIR_MODE_OUT";
+gpio16.$name           = "CH8_B_MCU";
+gpio16.gpioPin.$assign = "GPIO44";
+
+gpio17.direction       = "GPIO_DIR_MODE_OUT";
+gpio17.$name           = "Pulser_EN";
+gpio17.gpioPin.$assign = "GPIO25";
+
+gpio18.direction       = "GPIO_DIR_MODE_OUT";
+gpio18.$name           = "Analog_EN";
+gpio18.gpioPin.$assign = "GPIO17";
+
+gpio19.direction       = "GPIO_DIR_MODE_OUT";
+gpio19.$name           = "MODE0";
+gpio19.gpioPin.$assign = "GPIO39";
+
+gpio20.direction       = "GPIO_DIR_MODE_OUT";
+gpio20.$name           = "MODE1";
+gpio20.gpioPin.$assign = "GPIO42";
+
+gpio21.direction       = "GPIO_DIR_MODE_OUT";
+gpio21.$name           = "MCU_LED";
+gpio21.gpioPin.$assign = "GPIO16";
+
+gpio22.direction       = "GPIO_DIR_MODE_OUT";
+gpio22.$name           = "AFE_GAIN_A1";
+gpio22.gpioPin.$assign = "GPIO31";
+
+gpio23.direction       = "GPIO_DIR_MODE_OUT";
+gpio23.$name           = "AFE_GAIN_A2";
+gpio23.gpioPin.$assign = "GPIO30";
+
+gpio24.direction       = "GPIO_DIR_MODE_OUT";
+gpio24.$name           = "AFE_GAIN_B1";
+gpio24.gpioPin.$assign = "GPIO4";
+
+gpio25.direction       = "GPIO_DIR_MODE_OUT";
+gpio25.$name           = "AFE_GAIN_B2";
+gpio25.gpioPin.$assign = "GPIO8";
+
+gpio26.$name           = "THP";
+gpio26.gpioPin.$assign = "GPIO13";
+
+gpio27.$name           = "BOOT0";
+gpio27.gpioPin.$assign = "GPIO24";
+
+gpio28.$name           = "BOOT1";
+gpio28.gpioPin.$assign = "GPIO32";
+
+gpio29.direction       = "GPIO_DIR_MODE_OUT";
+gpio29.$name           = "EEPROM_WC";
+gpio29.gpioPin.$assign = "GPIO33";
+
+i2c1.$name                  = "myI2CA";
+i2c1.i2c.$assign            = "I2CA";
+i2c1.i2c.i2c_sdaPin.$assign = "GPIO26";
+i2c1.i2c.i2c_sclPin.$assign = "GPIO27";
+
+i2c2.$name                  = "myI2CB";
+i2c2.mode                   = "TARGET";
+i2c2.registerInterrupts     = true;
+i2c2.useFifo                = false;
+i2c2.ownAddress             = 0x21;
+i2c2.targetAddress          = 0x21;
+i2c2.initialMode            = "RECEIVE_MODE";
+i2c2.enabledInterrupts      = ["I2C_INT_ADDR_TARGET","I2C_INT_ARB_LOST","I2C_INT_NO_ACK","I2C_INT_REG_ACCESS_RDY","I2C_INT_RX_DATA_RDY","I2C_INT_STOP_CONDITION","I2C_INT_TX_DATA_RDY"];
+i2c2.bitCount               = "I2C_BITCOUNT_8";
+i2c2.i2c.$assign            = "I2CB";
+i2c2.i2c.i2c_sdaPin.$assign = "GPIO2";
+i2c2.i2c.i2c_sclPin.$assign = "GPIO3";
+
+/**
+ * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
+ * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
+ * re-solve from scratch.
+ */
+analog1.analog.$suggestSolution              = "ANALOG";
+analog1.analog["a14/c4Pin"].$suggestSolution = "A14/C4";
+analog1.analog["a15/c7Pin"].$suggestSolution = "A15/C7";
+analog1.analog["a7/c3Pin"].$suggestSolution  = "A7/C3";

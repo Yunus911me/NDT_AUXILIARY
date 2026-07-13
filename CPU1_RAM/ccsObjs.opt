@@ -1,0 +1,11 @@
+"./i2ca_eeprom.obj"
+"./m24m01e.obj"
+"./main.obj"
+"./max14808.obj"
+"./syscfg/board.obj"
+"./syscfg/c2000ware_libraries.obj"
+"./device/device.obj"
+"./device/f28002x_codestartbranch.obj"
+"../28002x_generic_ram_lnk.cmd"
+"C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/ccs/Debug/driverlib.lib"
+-llibc.a
