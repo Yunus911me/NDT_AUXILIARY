@@ -25,9 +25,8 @@ Firmware for a 150 kHz guided-wave ultrasonic collar (NDT auxiliary board) built
 2. Supply rails are measured (ADCA SOC4–8) — scan is **blocked** if any rail is out of tolerance.
 3. HV supply enabled (`Pulser_EN`), 500 µs settle.
 4. 5–10 cycle 150 kHz bipolar tone-burst fired on all 8 channels simultaneously (direct GPIO register writes, drift-free CPU-Timer-0 pacing).
-5. MAX14808 T/R switches close (~12 µs dead time).
-6. ePWM1 paces ADCA+ADCC SOC0–3 every 1.6 µs; a tight RAM-resident polling loop stores 512 samples × 8 channels.
-7. Record marked valid; HV disabled; board returns to idle.
+5. ePWM1 paces ADCA+ADCC SOC0–3 every 1.6 µs; a tight RAM-resident polling loop stores 512 samples × 8 channels.
+6. Record marked valid; HV disabled; board returns to idle.
 
 The A-scan time axis is implicit: `t(i) = start_delay_ns + i × sample_period_ns`, with `t = 0` at burst start. `start_delay_ns` is measured per capture and reported in the record header.
 
