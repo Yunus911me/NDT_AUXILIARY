@@ -70,7 +70,7 @@
 
 #include "driverlib.h"
 #include "device.h"
-#include "board.h"       /* SysConfig generated — Board_init() lives here   */
+#include "board.h"       
 #include "max14808.h"
 #include "m24m01e.h"
 #include "i2ca_eeprom.h"
@@ -121,7 +121,7 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * GPIO bitmasks for timing-critical simultaneous register writes
- * (unchanged from previous revision — see that header for derivation)
+ * (unchanged from previous revision)
  * ═══════════════════════════════════════════════════════════════════════════ */
 #define GPIOA_A_MASK    0x000084E2UL
 #define GPIOA_B_MASK    0x00C04201UL
@@ -144,12 +144,10 @@
 #define BURST_CYCLES_MAX      10U
 #define BURST_CYCLES_DEFAULT  5U
 
-/* ePWM1 SOCA period. On the F28002x, EPWMCLK is FIXED at SYSCLK/2 = 50 MHz
- * (no PERCLKDIVSEL.EPWMCLKDIV divider exists on this device, unlike
- * F2837x/F28004x) → one time-base tick = 20 ns.
+/* ePWM1 SOCA period. On the F28002x, EPWMCLK is FIXED at SYSCLK/2 = 50 MHz → one time-base tick = 20 ns.
  * 80 ticks → 1.6 µs → 625 kSps per channel.
  * Lower bound: the 4-SOC round robin per ADC needs ≈1.45 µs (15-SYSCLK
- * windows + ~210 ns conversions at ADCCLK = 50 MHz).                        */
+ * Sampling Window + ~210 ns (10.5 ADCCLK) conversions at ADCCLK = 50 MHz).  */
 #define EPWMCLK_TICK_NS            20U    /* EPWMCLK = SYSCLK/2, fixed       */
 #define SAMPLE_PERIOD_EPWM_TICKS   80U
 #define SAMPLE_PERIOD_NS           (SAMPLE_PERIOD_EPWM_TICKS * EPWMCLK_TICK_NS)
