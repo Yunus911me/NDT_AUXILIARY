@@ -9,20 +9,21 @@ Firmware for a 150 kHz guided-wave ultrasonic collar (NDT auxiliary board) built
 ```
  Master MCU ──I2CB (slave 0x21)──► F280025 ──I2CA (master)──► M24M01E EEPROM
                                       │
-                    ┌─────────────────┼──────────────────┐
-                    ▼                 ▼                  ▼
-              MAX14808 pulser    AD8334 AFE +       ADCA / ADCC
-              (octal 3-level,    TLV9354 buffers    (SOC0–3 scan,
-               8× DINP/DINN)                         ePWM1-paced)
-                    │                 ▲                  ▲
-                    ▼                 │                  │
-               8× PZT elements ───────┴──────────────────┘
+                    ┌─────────────────┼──────────────────────────┐
+                    ▼                                            ▲
+              MAX14808 pulser                               ADCA / ADCC
+              (octal 3-level,                              (SOC0–3 scan,
+               8× DINP/DINN)                               ePWM1-paced)
+                    │                                            ▲
+                    ▼                                            │
+               8× PZT elements ──► AD8334 AFE + TLV9354 buffers ─┘
+                                        
 ```
 
 ### Scan sequence
 
 1. Master writes `0x01` over I2CB.
-2. Supply rails are measured (ADCA SOC4–8) — scan is **blocked** if any rail is out of tolerance.
+2. Supply rails are measured (ADCA SOC4–8) scan is **blocked** if any rail is out of tolerance.
 3. HV supply enabled (`Pulser_EN`), 500 µs settle.
 4. 5–10 cycle 150 kHz bipolar tone-burst fired on all 8 channels simultaneously (direct GPIO register writes, drift-free CPU-Timer-0 pacing).
 5. ePWM1 paces ADCA+ADCC SOC0–3 every 1.6 µs; a tight RAM-resident polling loop stores 512 samples × 8 channels.
@@ -74,7 +75,7 @@ A plain **read** returns bytes from the currently selected stream. All multi-byt
 
 ## Timing
 
-SYSCLK = 100 MHz. On the F28002x, **EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz** — there is no `PERCLKDIVSEL` EPWM clock divider on this device family (unlike F2837x/F28004x), so all ePWM tick maths is in 20 ns units.
+SYSCLK = 100 MHz. On the F28002x, **EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz** there is no `PERCLKDIVSEL` EPWM clock divider on this device family (unlike F2837x/F28004x), so all ePWM tick maths is in 20 ns units.
 
 | Item              | Value                                                      |
 |-------------------|------------------------------------------------------------|
@@ -90,9 +91,9 @@ SYSCLK = 100 MHz. On the F28002x, **EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz**
 
 ## Memory
 
-The F28002x has **24 KB SRAM total** — budget carefully:
+The F28002x has **24 KB SRAM total**  budget carefully:
 
-- `g_waveBuf` (8 × 512 × uint16) = 4096 words (**8 KB**) — the dominant consumer.
+- `g_waveBuf` (8 × 512 × uint16) = 4096 words (**8 KB**) the dominant consumer.
 - The EEPROM save/load path peaks at ≈ 0x250 words of stack (two nested 256-entry staging buffers). **Set stack size ≥ 0x400** in the linker `.cmd`.
 - `NDT_captureRecord()` is placed in `.TI.ramfunc`. The linker `.cmd` must map this section **LOAD = FLASH, RUN = RAMLS** with a copy table; `Device_init()` performs the copy at boot when `_FLASH` is defined.
 
@@ -104,7 +105,7 @@ Toolchain: **Code Composer Studio** with the C2000 compiler, **C2000Ware** drive
 
 1. Import the CCS project; confirm the device is F280025.
 2. For a flash target, add the predefined symbol `_FLASH` (Project Properties → C2000 Compiler → Predefined Symbols). This makes `Device_init()` copy `.TI.ramfunc` to RAM and program flash wait-states. Omit `_FLASH` for a RAM-only debug target.
-3. Build with **`-O2`** — the capture loop's 160-cycle-per-sweep budget assumes optimized code.
+3. Build with **`-O2`** the capture loop's 160-cycle-per-sweep budget assumes optimized code.
 4. Verify the linker `.cmd` provides the `.TI.ramfunc` LOAD/RUN mapping and ≥ 0x400-word stack.
 
 ### SysConfig responsibilities (`Board_init()`)
@@ -113,7 +114,7 @@ Toolchain: **Code Composer Studio** with the C2000 compiler, **C2000Ware** drive
 - **ADCC**: SOC0–3 scan (trigger = `EPWM1_SOCA`, INT1 flag polled).
 - **GPIO**: all pulser DINP/DINN, control, status pins, `EEPROM_WC`.
 - **I2CB**: slave (target) mode @ address 0x21, interrupt registered.
-- **I2CA**: master @ 400 kHz, polled — EEPROM transport.
+- **I2CA**: master @ 400 kHz, polled EEPROM transport.
 
 ---
 
@@ -154,7 +155,7 @@ Pulser DINP/DINN channel pins and the derived GPIO write masks are documented at
 
 ## Fault handling
 
-- **Thermal fault** (`THP` low, active-low open-drain): HV disabled, pulser outputs disabled, LED blinks at ~5 Hz. **Latched** — requires a reset.
+- **Thermal fault** (`THP` low, active-low open-drain): HV disabled, pulser outputs disabled, LED blinks at ~5 Hz. **Latched** requires a reset.
 - **Voltage fault**: scan is blocked, `VOLTAGE_FAULT` set, board returns to idle. The master may retry `0x01` once rails recover.
 - **EEPROM missing/failed**: non-fatal. `EEPROM_FAIL` is set at boot and scans continue to work; only storage is unavailable.
 
