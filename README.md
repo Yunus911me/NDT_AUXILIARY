@@ -170,4 +170,3 @@ Pulser DINP/DINN channel pins and the derived GPIO write masks are documented at
 | `max14808.c/h`  | MAX14808 octal pulser driver (mode, current, T/R switching)|
 | `m24m01e.c/h`   | M24M01E EEPROM driver + A-scan record save/load layout     |
 | `i2ca_eeprom.c/h` | I2CA polled-master transport callbacks for the EEPROM    |
-
