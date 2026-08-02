@@ -325,10 +325,8 @@ static void NDT_initTimers(void)
     CPUTimer_reloadTimerCounter(CPUTIMER0_BASE);
     CPUTimer_startTimer(CPUTIMER0_BASE);
 
-    /* NOTE: on the F28002x, EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz.
-     * There is NO SysCtl_setEPWMClockDivider() / PERCLKDIVSEL divider on
-     * this device (that API exists only on F2837x/F2838x/F28004x-class
-     * parts). All ePWM tick maths below is therefore in 20 ns units.       */
+    /* EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz.
+       */
     EPWM_setClockPrescaler(EPWM1_BASE, EPWM_CLOCK_DIVIDER_1,
                            EPWM_HSCLOCK_DIVIDER_1);   /* TBCLK = EPWMCLK    */
     EPWM_setTimeBasePeriod(EPWM1_BASE, SAMPLE_PERIOD_EPWM_TICKS - 1U);
@@ -361,7 +359,7 @@ static void NDT_initEeprom(void)
         .ctx           = NULL
     };
 
-    GPIO_writePin(PIN_EEPROM_WC, 0U);   /* writes enabled                    */
+    GPIO_writePin(PIN_EEPROM_WC, 0U);   /* writes enabled */
 
     if (m24m01e_init(&g_eeprom, &io, 0U) != M24M01E_OK ||
         m24m01e_probe(&g_eeprom)         != M24M01E_OK)
@@ -789,30 +787,9 @@ __interrupt void INT_myI2CB_ISR(void)
  * ═══════════════════════════════════════════════════════════════════════════ */
 void main(void)
 {
-    /* ── 1. Core system init ──────────────────────────────────────────────── */
-    /*
-     * Device_init() sets SYSCLK = 100 MHz and enables peripheral clocks.
-     * When the project defines the predefined symbol _FLASH (Project
-     * Properties → C2000 Compiler → Predefined Symbols, add "_FLASH"),
-     * Device_init() ALSO copies .TI.ramfunc from flash to RAM and calls
-     * Flash_initModule() to program wait-states — so no manual copy is
-     * needed here. Build without _FLASH for a RAM target.
-     */
     Device_init();
     Interrupt_initModule();
     Interrupt_initVectorTable();
-
-    /* ── 2. SysConfig-generated peripheral init ───────────────────────────── */
-    /*
-     * Board_init() configures:
-     *   ADC  — ADCA: SOC0–3 scan (trigger = EPWM1_SOCA, INT1 flag polled),
-     *                SOC4–8 voltage taps (software-forced, INT2 flag polled)
-     *          ADCC: SOC0–3 scan (trigger = EPWM1_SOCA, INT1 flag polled)
-     *          ADC INT1 is NOT PIE-registered any more — no scan ISRs.
-     *   GPIO — all pulser DINP/DINN, control, status pins, EEPROM_WC
-     *   I2CB — slave (TARGET) mode, interrupt registered
-     *   I2CA — master @400 kHz, polled — M24M01E EEPROM transport
-     */
     Board_init();
 
     /* ── 3. Timers: CPU Timer 0 free-running + ePWM1 sample pacer ─────────── */
