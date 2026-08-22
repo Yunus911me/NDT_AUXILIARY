@@ -89,6 +89,7 @@ main.obj: C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/version.h
 main.obj: C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/driver_inclusive_terminology_mapping.h
 main.obj: C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/device/device.h
 main.obj: syscfg/board.h
+main.obj: syscfg/device.h
 main.obj: ../max14808.h
 main.obj: ../m24m01e.h
 main.obj: C:/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include/stddef.h
@@ -271,6 +272,8 @@ C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/driver_inclusive_termino
 C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/device/device.h:
 
 syscfg/board.h:
+
+syscfg/device.h:
 
 ../max14808.h:
 

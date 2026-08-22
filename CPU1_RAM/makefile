@@ -15,9 +15,9 @@ ORDERED_OBJS += \
 "./main.obj" \
 "./max14808.obj" \
 "./syscfg/board.obj" \
+"./syscfg/device.obj" \
 "./syscfg/c2000ware_libraries.obj" \
-"./device/device.obj" \
-"./device/f28002x_codestartbranch.obj" \
+"./f28002x_codestartbranch.obj" \
 "../28002x_generic_ram_lnk.cmd" \
 "C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/ccs/Debug/driverlib.lib" \
 $(GEN_CMDS__FLAG) \
@@ -31,9 +31,7 @@ RMDIR := RMDIR /S/Q
 # All of the sources participating in the build are defined here
 -include sources.mk
 -include subdir_vars.mk
--include device/subdir_vars.mk
 -include subdir_rules.mk
--include device/subdir_rules.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
@@ -144,9 +142,9 @@ NDT_AUXILIARY.out: $(OBJS) $(CMD_SRCS) $(LIB_SRCS) $(GEN_CMDS)
 # Other Targets
 clean:
 	-$(RM) $(GEN_MISC_FILES__QUOTED)$(GEN_FILES__QUOTED)$(EXE_OUTPUTS__QUOTED)
-	-$(RM) "i2ca_eeprom.obj" "m24m01e.obj" "main.obj" "max14808.obj" "syscfg\board.obj" "syscfg\c2000ware_libraries.obj" "device\device.obj" "device\f28002x_codestartbranch.obj" 
-	-$(RM) "i2ca_eeprom.d" "m24m01e.d" "main.d" "max14808.d" "syscfg\board.d" "syscfg\c2000ware_libraries.d" "device\device.d" 
-	-$(RM) "device\f28002x_codestartbranch.d" 
+	-$(RM) "i2ca_eeprom.obj" "m24m01e.obj" "main.obj" "max14808.obj" "syscfg\board.obj" "syscfg\device.obj" "syscfg\c2000ware_libraries.obj" "f28002x_codestartbranch.obj" 
+	-$(RM) "i2ca_eeprom.d" "m24m01e.d" "main.d" "max14808.d" "syscfg\board.d" "syscfg\device.d" "syscfg\c2000ware_libraries.d" 
+	-$(RM) "f28002x_codestartbranch.d" 
 	-$(RMDIR) $(GEN_MISC_DIRS__QUOTED)
 	-@echo ' '
 

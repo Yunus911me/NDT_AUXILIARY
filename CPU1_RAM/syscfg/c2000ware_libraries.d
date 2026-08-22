@@ -89,7 +89,8 @@ syscfg/c2000ware_libraries.obj: C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/dr
 syscfg/c2000ware_libraries.obj: C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/inc/hw_spi.h
 syscfg/c2000ware_libraries.obj: C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/version.h
 syscfg/c2000ware_libraries.obj: C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/driver_inclusive_terminology_mapping.h
-syscfg/c2000ware_libraries.obj: C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/device/device.h
+syscfg/c2000ware_libraries.obj: syscfg/device.h
+syscfg/c2000ware_libraries.obj: syscfg/clocktree.h
 
 syscfg/c2000ware_libraries.c:
 
@@ -269,5 +270,7 @@ C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/version.h:
 
 C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/driver_inclusive_terminology_mapping.h:
 
-C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/device/device.h:
+syscfg/device.h:
+
+syscfg/clocktree.h:
 

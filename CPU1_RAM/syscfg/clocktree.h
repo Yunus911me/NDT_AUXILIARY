@@ -47,7 +47,7 @@
 //
 //*****************************************************************************
 //
-// Input Clock to SYSPLL (OSCCLK)	= 20.00 MHz    (XTAL provides OSCCLK)
+// Input Clock to SYSPLL (OSCCLK)	= 16.00 MHz    (X1 provides OSCCLK)
 //
 //##### SYSPLL ENABLED #####
 //
@@ -63,16 +63,16 @@
 //
 //*****************************************************************************
 //
-//	Input Clock to SYSPLL (OSCCLK) = XTAL = 20.00 MHz
+//	Input Clock to SYSPLL (OSCCLK) = X1 = 16.00 MHz
 //
-#define DEVICE_OSCSRC_FREQ          20000000U
+#define DEVICE_OSCSRC_FREQ          16000000U
 //
 // Define to pass to SysCtl_setClock(). Will configure the clock as follows:
 // SYSPLL ENABLED
-// SYSCLK = 100.00 MHz = 20.00 MHz (OSCCLK) * 20 (IMULT) / (1 (REFDIV) * 2 (ODIV) * 2 (SYSCLKDIVSEL))
-#define DEVICE_SYSCLK_FREQ          ((DEVICE_OSCSRC_FREQ * 20) / (1 * 2 * 2))
+// SYSCLK = 100.00 MHz = 16.00 MHz (OSCCLK) * 25 (IMULT) / (1 (REFDIV) * 2 (ODIV) * 2 (SYSCLKDIVSEL))
+#define DEVICE_SYSCLK_FREQ          ((DEVICE_OSCSRC_FREQ * 25) / (1 * 2 * 2))
 //
-#define DEVICE_SETCLOCK_CFG         (SYSCTL_OSCSRC_XTAL  | SYSCTL_IMULT(20) | \
+#define DEVICE_SETCLOCK_CFG         (SYSCTL_OSCSRC_XTAL_SE  | SYSCTL_IMULT(25) | \
 									 SYSCTL_REFDIV(1) | SYSCTL_ODIV(2)| \
 									 SYSCTL_SYSDIV(2) | SYSCTL_PLL_ENABLE | \
 									 SYSCTL_DCC_BASE_0)

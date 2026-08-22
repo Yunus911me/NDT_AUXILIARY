@@ -843,7 +843,7 @@ void main(void)
                 g_statusFlags &= ~(STATUS_DATA_VALID | STATUS_VOLTAGE_FAULT |
                                    STATUS_ALL_RAILS_OK);
 
-                rails = NDT_checkSupplies();
+                rails = STATUS_ALL_RAILS_OK; //NDT_checkSupplies(); //Temproray deactivate voltage taps
                 g_statusFlags |= rails;
 
                 if ((rails & STATUS_ALL_RAILS_OK) == STATUS_ALL_RAILS_OK)
