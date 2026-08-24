@@ -18,5 +18,3 @@
  *                TI C/C++ toolchain
  */
 
-/* libraries required for driverlib */
--l"driverlib/f28002x/driverlib/ccs/Debug/driverlib.lib"  

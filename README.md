@@ -2,6 +2,11 @@
 
 Firmware for a 150 kHz guided-wave ultrasonic collar (NDT auxiliary board) built around a TI **TMS320F280025** (C2000, 100 MHz). The board fires a bipolar tone-burst on 8 PZT channels via a MAX14808 octal pulser, captures a synchronous 8-channel A-scan at 625 kSps/channel, and serves the record to a master MCU over I2C. Records can be archived to and recalled from an on-board M24M01E EEPROM.
 
+The firmware is split into a policy layer (state machine, configuration), a
+board layer (pins, initialisation, acquisition), and three driver stacks
+(EEPROM, pulser, I2C slave). See **[Layers.md](Layers.md)** for the layer
+hierarchy and the dependency map before making changes.
+
 ---
 
 ## System overview
@@ -22,12 +27,18 @@ Firmware for a 150 kHz guided-wave ultrasonic collar (NDT auxiliary board) built
 
 ### Scan sequence
 
-1. Master writes `0x01` over I2CB.
+1. A trigger arrives — master writes `0x01` over I2CB, or the periodic timer
+   elapses, depending on `NDT_TRIGGER_SOURCE` in `ndt_config.h`. Both produce
+   the same internal event.
 2. Supply rails are measured (ADCA SOC4–8) scan is **blocked** if any rail is out of tolerance.
 3. HV supply enabled (`Pulser_EN`), 500 µs settle.
 4. 5–10 cycle 150 kHz bipolar tone-burst fired on all 8 channels simultaneously (direct GPIO register writes, drift-free CPU-Timer-0 pacing).
 5. ePWM1 paces ADCA+ADCC SOC0–3 every 1.6 µs; a tight RAM-resident polling loop stores 512 samples × 8 channels.
 6. Record marked valid; HV disabled; board returns to idle.
+
+While the record buffer is being written (capture, or an EEPROM load) the slave
+read side is frozen and returns `0xFF`, so a master read can never observe a
+half-overwritten A-scan.
 
 The A-scan time axis is implicit: `t(i) = start_delay_ns + i × sample_period_ns`, with `t = 0` at burst start. `start_delay_ns` is measured per capture and reported in the record header.
 
@@ -67,9 +78,34 @@ A plain **read** returns bytes from the currently selected stream. All multi-byt
 
 **Master usage notes**
 
-- Commands `0x01`, `0x06`, `0x07` are **silently ignored** unless the board is idle. Poll `DATA_VALID` / `EEPROM_BUSY` to sequence operations.
+- Commands `0x01`, `0x06`, `0x07` are **queued** (8 deep) and executed as soon as the board returns to idle; they are dropped only on queue overflow. *This changed with the state-machine refactor — the previous firmware ignored them outright unless the board was idle.* Poll `DATA_VALID` / `EEPROM_BUSY` to sequence operations.
+- A read issued while the record buffer is being rewritten returns `0xFF` bytes rather than partial data. Check `EEPROM_BUSY` / `DATA_VALID` first.
+- Unknown command bytes are counted, not acted on.
 - A scan (burst + capture) is blocking on the board side and completes in ~0.9 ms; the I2CB slave remains serviceable throughout.
 - Rail tolerance is ±5 % of the tap targets listed below.
+
+---
+
+## Configuration (`ndt_config.h`)
+
+Every policy decision lives in one header; physical facts (pin numbers, SYSCLK
+tick counts, ADC mapping) stay in `main.c`.
+
+| Symbol | Default | Effect |
+|--------|---------|--------|
+| `NDT_ASCAN_SAMPLES` / `_CHANNELS` | 512 / 8 | Record geometry. Product × 2 must be a multiple of the 256-byte EEPROM page; a `#error` enforces it. |
+| `NDT_BURST_CYCLES_MIN/MAX/DEFAULT` | 5 / 10 / 5 | Clamp applied to command `0x02`. |
+| `NDT_TRIGGER_SOURCE` | `NDT_TRIG_I2C` | `NDT_TRIG_I2C`, `NDT_TRIG_PERIODIC`, or `NDT_TRIG_BOTH`. |
+| `NDT_TRIG_PERIOD_MS` | 1000 | Period for the periodic source. |
+| `NDT_TRIG_SKIP_MISSED` | 1 | Periodic only: skip ticks missed during a long scan, or catch up. |
+| `NDT_THERMAL_LATCHED` | 1 | 0 lets the board recover once `THP` releases. |
+| `NDT_THERMAL_BLINK_MS` | 100 | Fault LED blink half-period. |
+| `NDT_I2CB_ADDRESS` | 0x21 | Slave address (must match SysConfig). |
+| `NDT_EVENT_QUEUE_DEPTH` | 8 | ISR → main-loop event ring; power of two. |
+
+Switching to periodic firing requires no code change: an I2CB command and a
+timer tick both post `NDT_EV_TRIGGER`, and the state machine cannot tell them
+apart.
 
 ---
 
@@ -86,6 +122,7 @@ SYSCLK = 100 MHz. On the F28002x, **EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz**
 | ADC sweep budget  | 4-SOC round robin per ADC ≈ 1.45 µs < 1.6 µs ✓             |
 | Record length     | 512 samples × 1.6 µs = **819.2 µs** listen window          |
 | Timestamp base    | CPU Timer 0, free-running, 10 ns/tick                      |
+| Millisecond tick  | CPU Timer 1, 1 kHz interrupt (periodic trigger, fault blink) |
 
 ---
 
@@ -115,6 +152,10 @@ Toolchain: **Code Composer Studio** with the C2000 compiler, **C2000Ware** drive
 - **GPIO**: all pulser DINP/DINN, control, status pins, `EEPROM_WC`.
 - **I2CB**: slave (target) mode @ address 0x21, interrupt registered.
 - **I2CA**: master @ 400 kHz, polled EEPROM transport.
+
+ePWM1 and both CPU timers are configured in C (`NDT_initTimers()`), not by
+SysConfig. CPU Timer 1's interrupt is registered directly with
+`Interrupt_register(INT_TIMER1, …)`; it is on INT13 and needs no PIE ACK.
 
 ---
 
@@ -155,7 +196,7 @@ Pulser DINP/DINN channel pins and the derived GPIO write masks are documented at
 
 ## Fault handling
 
-- **Thermal fault** (`THP` low, active-low open-drain): HV disabled, pulser outputs disabled, LED blinks at ~5 Hz. **Latched** requires a reset.
+- **Thermal fault** (`THP` low, active-low open-drain): HV disabled, pulser outputs disabled, LED blinks at `NDT_THERMAL_BLINK_MS` intervals. Latched by default (`NDT_THERMAL_LATCHED`), requiring a reset. The blink is timer-driven, so the main loop keeps draining commands while the fault is active.
 - **Voltage fault**: scan is blocked, `VOLTAGE_FAULT` set, board returns to idle. The master may retry `0x01` once rails recover.
 - **EEPROM missing/failed**: non-fatal. `EEPROM_FAIL` is set at boot and scans continue to work; only storage is unavailable.
 
@@ -163,10 +204,25 @@ Pulser DINP/DINN channel pins and the derived GPIO write masks are documented at
 
 ## Source files
 
-| File            | Contents                                                   |
-|-----------------|------------------------------------------------------------|
-| `main.c`        | State machine, burst generation, capture, I2CB slave ISR   |
-| `board.c/h`     | SysConfig-generated peripheral init                        |
-| `max14808.c/h`  | MAX14808 octal pulser driver (mode, current, T/R switching)|
-| `m24m01e.c/h`   | M24M01E EEPROM driver + A-scan record save/load layout     |
-| `i2ca_eeprom.c/h` | I2CA polled-master transport callbacks for the EEPROM    |
+| File | Layer | Contents |
+|------|-------|----------|
+| `ndt_config.h` | policy | Every tunable: geometry, trigger source, fault behaviour, queue depth |
+| `ndt_sm.c/h` | policy | State machine, event queue, trigger rules. No driverlib — builds on a host compiler |
+| `main.c` | board | Pin map, peripheral init, tone-burst, capture loop, shared buffers, hook table, `main()` |
+| `ndt_i2cb.c/h` | interface | I2CB slave protocol and ISR; posts events, serves streams |
+| `ndt_store.c/h` | record | A-scan slot format: magic, sequence, eviction, checksum, header serialisation |
+| `m24m01e.c/h` | chip | M24M01E EEPROM driver — addressing, paging, ACK polling, feature registers |
+| `i2ca_eeprom.c/h` | transport | `m24m01e_io_t` callbacks bound to F280025 I2CA, polled, timeout-bounded |
+| `max14808.c/h` | driver | MAX14808 octal pulser: mode, current, T/R switching |
+| `board.c/h` | platform | SysConfig-generated peripheral init — do not hand-edit |
+
+Dependency direction is strictly downward, with one exception: `ndt_i2cb.c`
+calls `ndt_sm_post()` upward, which is a queue push rather than a call into
+board code. Full map in [Layers.md](Layers.md).
+
+### Adding to the project
+
+`ndt_config.h`, `ndt_sm.c/h`, `ndt_i2cb.c/h` and `ndt_store.c/h` are new files;
+add them to the CCS project alongside the existing sources. `m24m01e.c/h` lost
+its A-scan section to `ndt_store.c` and shrank accordingly; `i2ca_eeprom.c/h`
+and `max14808.c/h` are unchanged.

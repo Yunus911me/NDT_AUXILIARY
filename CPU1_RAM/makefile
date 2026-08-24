@@ -4,7 +4,7 @@
 
 SHELL = cmd.exe
 
-CG_TOOL_ROOT := C:/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS
+CG_TOOL_ROOT := C:/ti/ti-cgt-c2000_22.6.0.LTS
 
 GEN_OPTS__FLAG := --cmd_file="syscfg/board.opt" --cmd_file="syscfg/c2000ware_libraries.opt" 
 GEN_CMDS__FLAG := 
@@ -15,11 +15,14 @@ ORDERED_OBJS += \
 "./main.obj" \
 "./max14808.obj" \
 "./syscfg/board.obj" \
-"./syscfg/device.obj" \
 "./syscfg/c2000ware_libraries.obj" \
-"./f28002x_codestartbranch.obj" \
+"./ndt_i2cb.obj" \
+"./ndt_sm.obj" \
+"./ndt_store.obj" \
+"./device/device.obj" \
+"./device/f28002x_codestartbranch.obj" \
 "../28002x_generic_ram_lnk.cmd" \
-"C:/ti/C2000Ware_26_00_00_00/driverlib/f28002x/driverlib/ccs/Debug/driverlib.lib" \
+"C:/ti/C2000Ware_26_01_00_00/driverlib/f28002x/driverlib/ccs/Debug/driverlib.lib" \
 $(GEN_CMDS__FLAG) \
 -llibc.a \
 
@@ -31,7 +34,9 @@ RMDIR := RMDIR /S/Q
 # All of the sources participating in the build are defined here
 -include sources.mk
 -include subdir_vars.mk
+-include device/subdir_vars.mk
 -include subdir_rules.mk
+-include device/subdir_rules.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
@@ -135,16 +140,16 @@ all: $(OBJS) $(CMD_SRCS) $(LIB_SRCS) $(GEN_CMDS)
 # Tool invocations
 NDT_AUXILIARY.out: $(OBJS) $(CMD_SRCS) $(LIB_SRCS) $(GEN_CMDS)
 	@echo 'C2000 Linker - building target: "$@"'
-	"C:/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/bin/cl2000" -v28 -ml -mt --float_support=fpu32 --idiv_support=idiv0 --tmu_support=tmu0 -Ooff --define=DEBUG --define=RAM --c99 --diag_suppress=10063 --diag_warning=225 --diag_wrap=off --display_error_number --gen_func_subsections=on --abi=eabi -z -m"NDT_AUXILIARY.map" --heap_size=0x100 --stack_size=0x200 --warn_sections -i"C:/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/lib" -i"C:/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include" --reread_libs --diag_wrap=off --display_error_number --xml_link_info="NDT_AUXILIARY_linkInfo.xml" --entry_point=code_start --rom_model -o "NDT_AUXILIARY.out" $(ORDERED_OBJS)
+	"C:/ti/ti-cgt-c2000_22.6.0.LTS/bin/cl2000" -v28 -ml -mt --float_support=fpu32 --idiv_support=idiv0 --tmu_support=tmu0 -Ooff --define=DEBUG --define=RAM --c99 --diag_suppress=10063 --diag_warning=225 --diag_wrap=off --display_error_number --gen_func_subsections=on --abi=eabi -z -m"NDT_AUXILIARY.map" --heap_size=0x100 --stack_size=0x200 --warn_sections -i"C:/ti/ti-cgt-c2000_22.6.0.LTS/lib" -i"C:/ti/ti-cgt-c2000_22.6.0.LTS/include" --reread_libs --diag_wrap=off --display_error_number --xml_link_info="NDT_AUXILIARY_linkInfo.xml" --entry_point=code_start --rom_model -o "NDT_AUXILIARY.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: "$@"'
 	@echo ' '
 
 # Other Targets
 clean:
 	-$(RM) $(GEN_MISC_FILES__QUOTED)$(GEN_FILES__QUOTED)$(EXE_OUTPUTS__QUOTED)
-	-$(RM) "i2ca_eeprom.obj" "m24m01e.obj" "main.obj" "max14808.obj" "syscfg\board.obj" "syscfg\device.obj" "syscfg\c2000ware_libraries.obj" "f28002x_codestartbranch.obj" 
-	-$(RM) "i2ca_eeprom.d" "m24m01e.d" "main.d" "max14808.d" "syscfg\board.d" "syscfg\device.d" "syscfg\c2000ware_libraries.d" 
-	-$(RM) "f28002x_codestartbranch.d" 
+	-$(RM) "i2ca_eeprom.obj" "m24m01e.obj" "main.obj" "max14808.obj" "syscfg\board.obj" "syscfg\c2000ware_libraries.obj" "ndt_i2cb.obj" "ndt_sm.obj" "ndt_store.obj" "device\device.obj" "device\f28002x_codestartbranch.obj" 
+	-$(RM) "i2ca_eeprom.d" "m24m01e.d" "main.d" "max14808.d" "syscfg\board.d" "syscfg\c2000ware_libraries.d" "ndt_i2cb.d" "ndt_sm.d" "ndt_store.d" "device\device.d" 
+	-$(RM) "device\f28002x_codestartbranch.d" 
 	-$(RMDIR) $(GEN_MISC_DIRS__QUOTED)
 	-@echo ' '
 

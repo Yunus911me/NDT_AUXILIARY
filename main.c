@@ -1,54 +1,54 @@
 /**
  * @file main.c
- * @brief F280025 NDT Auxiliary Board — main application
+ * @brief F280025 NDT Auxiliary Board — hardware layer and composition root
  *        (150 kHz guided-wave collar: tone-burst A-scan + EEPROM storage)
  *
+ * ── What lives where after the refactor ───────────────────────────────────
+ *   main.c        pin map, peripheral init, acquisition, buffers, and the
+ *                 hook table that hands those capabilities to the state
+ *                 machine. Everything here touches registers.
+ *   ndt_sm.c      when things happen (states, events, trigger policy).
+ *                 No driverlib.
+ *   ndt_i2cb.c    the I2CB slave protocol and its ISR.
+ *   ndt_store.c   A-scan record format on top of the EEPROM.
+ *   ndt_config.h  every policy knob in one place.
+ *
+ * Layering below main.c:
+ *   ndt_store.c -> m24m01e.c (chip) -> i2ca_eeprom.c (F280025 I2CA)
+ *
  * ── System flow ───────────────────────────────────────────────────────────
- *  1. Board peripherals initialised  (SysConfig → Board_init)
+ *  1. Board peripherals initialised  (SysConfig -> Board_init)
  *  2. ePWM1 configured (in C, no pins) as the ADC sample-rate pacer
  *  3. CPU Timer 0 free-running (10 ns/tick) for burst timing + timestamps
- *  4. Analogue front-end powered via Analog_EN (GPIO17), AFE gain set HIGH
- *  5. MAX14808 initialised in octal three-level mode (MODE0=1, MODE1=0)
- *  6. M24M01E EEPROM on I2CA probed (WC = GPIO33 driven LOW)
- *  7. I2CB slave receives scan command 0x01 from master MCU
- *  8. Supply rails checked (ADCA SOC4–8) BEFORE firing; scan blocked if bad
- *  9. 150 kHz bipolar tone-burst (g_burstCycles = 5..10 cycles) fired on all
- *     8 channels simultaneously; T/R switches close (~12 µs dead time)
- * 10. ePWM1 paces ADCA+ADCC SOC0–3 every SAMPLE_PERIOD_EPWM_TICKS; a tight
- *     polling loop stores WAVE_SAMPLES continuous samples per channel
- * 11. A-scan = the full 8×WAVE_SAMPLES record; time axis is implicit:
- *         t(i) = start_delay_ns + i * sample_period_ns     (t=0 = burst start)
- * 12. Master may save the record to EEPROM under a 16-bit ID (cmd 0x06)
- *     or recall a stored record by ID into the RAM buffer (cmd 0x07)
+ *  4. CPU Timer 1 at 1 kHz provides the millisecond tick the state machine
+ *     uses for periodic triggering and non-blocking fault blinking
+ *  5. Analogue front-end powered via Analog_EN (GPIO17), AFE gain set HIGH
+ *  6. MAX14808 initialised in octal three-level mode (MODE0=1, MODE1=0)
+ *  7. M24M01E EEPROM on I2CA probed (WC = GPIO33 driven LOW), record store
+ *     bound on top of it
+ *  8. I2CB slave serves the master MCU; commands become state-machine events
+ *  9. Supply rails checked (ADCA SOC4-8) BEFORE firing; scan blocked if bad
+ * 10. 150 kHz bipolar tone-burst (5..10 cycles) fired on all 8 channels
+ *     simultaneously; T/R switches close (~12 us dead time)
+ * 11. ePWM1 paces ADCA+ADCC SOC0-3 every SAMPLE_PERIOD_EPWM_TICKS; a tight
+ *     polling loop stores NDT_ASCAN_SAMPLES continuous samples per channel
+ * 12. Time axis is implicit: t(i) = start_delay_ns + i * sample_period_ns
  *
- * ── I2C protocol (I2CB slave, address 0x21) ───────────────────────────────
- *   WRITE [0x01]              trigger A-scan (rails checked first)
- *   WRITE [0x02][n]           set burst cycles, clamped to 5..10
- *   WRITE [0x03]              select STATUS stream    → READ 2 bytes
- *   WRITE [0x04][ch]          select WAVEFORM stream, channel ch = 0..7
- *                                                     → READ 1024 bytes
- *                               (WAVE_SAMPLES × uint16 LE of that channel)
- *   WRITE [0x05]              select TAPS stream      → READ 10 bytes
- *   WRITE [0x06][idL][idH]    save current A-scan to EEPROM under ID
- *   WRITE [0x07][idL][idH]    load A-scan by ID from EEPROM into RAM buffer
- *   WRITE [0x08]              select HEADER stream    → READ 16 bytes:
- *                               id(2) seq(4) burst(2) samples(2)
- *                               period_ns(2) start_delay_ns(4)   all LE
- *   READ                      bytes of the currently selected stream
+ * ── I2C protocol ──────────────────────────────────────────────────────────
+ *   See ndt_i2cb.h — the protocol table now lives with its implementation.
  *
  * ── Timing constants (SYSCLK = 100 MHz; EPWMCLK = SYSCLK/2 fixed) ────────
- *   Burst      : 150 kHz → half-periods 333/334 SYSCLK (3.33/3.34 µs)
- *   Sampling   : ePWM1 SOCA every 80 EPWMCLK ticks (20 ns each) = 1.6 µs
- *                → 625 kSps/channel
- *                (4-SOC round robin per ADC ≈ 1.45 µs < 1.6 µs — fits)
- *   Record     : 512 samples × 1.6 µs = 819.2 µs listen window
+ *   Burst      : 150 kHz -> half-periods 333/334 SYSCLK (3.33/3.34 us)
+ *   Sampling   : ePWM1 SOCA every 80 EPWMCLK ticks (20 ns each) = 1.6 us
+ *                -> 625 kSps/channel
+ *   Record     : 512 samples x 1.6 us = 819.2 us listen window
  *
  * ── RAM budget (F28002x has 24 KB SRAM total) ─────────────────────────────
- *   g_waveBuf  : 8 × 512 uint16 = 4096 words (8 KB) — the dominant consumer.
- *   EEPROM save/load path peaks ≈ 0x250 words of stack (two 256-entry
- *   staging buffers nested) — set stack size ≥ 0x400 in the linker .cmd.
- *   NDT_captureRecord() is placed in .TI.ramfunc: make sure the linker .cmd
- *   maps that section to RAM (LOAD = FLASH, RUN = RAMLS, table copy at boot).
+ *   g_waveBuf  : 8 x 512 uint16 = 4096 words (8 KB) — dominant consumer.
+ *   EEPROM save/load peaks ~0x250 words of stack (two 256-entry staging
+ *   buffers nested) — keep the linker stack >= 0x400.
+ *   NDT_captureRecord() is placed in .TI.ramfunc: the linker .cmd must map
+ *   that section to RAM.
  *
  * ── ADC channel map (g_waveBuf row index) ────────────────────────────────
  *   [0] ADCA CH6   tlv1_out1      [4] ADCC CH6   tlv1_out2
@@ -56,24 +56,29 @@
  *   [2] ADCA CH2   tlv1_out4      [6] ADCC CH11  tlv2_out3
  *   [3] ADCA CH9   tlv2_out1      [7] ADCC CH10  tlv2_out4
  *
- * ── Voltage-tap map (g_voltBuf index, ADCA SOC4–8) ────────────────────────
+ * ── Voltage-tap map (g_voltBuf index, ADCA SOC4-8) ────────────────────────
  *   [0] vpp_tap      ADCIN12  target 2.912 V   [3] 5v_pulse_tap ADCIN11 1.250 V
  *   [1] 12V_tap      ADCIN5   target 1.714 V   [4] 5v_vfd_tap   ADCIN0  1.250 V
  *   [2] 7v_vfd_tap   ADCIN1   target 1.750 V
  *
- * ── Pin assignments (verified: schematic rev-A + F280025 80QFP pinout) ───
+ * ── Pin assignments (schematic rev-A + F280025 80QFP pinout) ─────────────
  *   Analog_EN  = GPIO17 (pin 40)   MODE0 = GPIO39 (pin 56)
  *   Pulser_EN  = GPIO25 (pin 42)   MODE1 = GPIO42 (pin 57)
  *   THP        = GPIO13 (pin 35)   EEPROM_WC = GPIO33 (LOW = writes enabled)
  *   EEPROM I2C : I2CA — SDA GPIO26 (pin 43), SCL GPIO27 (pin 44)
+ *   Master I2C : I2CB — SDA GPIO2  (pin 61), SCL GPIO3  (pin 60)
  */
 
 #include "driverlib.h"
 #include "device.h"
-#include "board.h"       
+#include "board.h"
 #include "max14808.h"
 #include "m24m01e.h"
 #include "i2ca_eeprom.h"
+#include "ndt_config.h"
+#include "ndt_store.h"
+#include "ndt_sm.h"
+#include "ndt_i2cb.h"
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * GPIO pin IDs (F280025 GPIO indices; chip package pins in comments)
@@ -121,7 +126,6 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * GPIO bitmasks for timing-critical simultaneous register writes
- * (unchanged from previous revision)
  * ═══════════════════════════════════════════════════════════════════════════ */
 #define GPIOA_A_MASK    0x000084E2UL
 #define GPIOA_B_MASK    0x00C04201UL
@@ -131,7 +135,7 @@
 #define GPIOB_ALL_MASK  (GPIOB_A_MASK | GPIOB_B_MASK)
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * Excitation / acquisition timing
+ * Excitation / acquisition timing (hardware facts; policy is in ndt_config.h)
  * ═══════════════════════════════════════════════════════════════════════════ */
 #define PZT_FREQ_HZ           150000UL
 
@@ -140,24 +144,19 @@
 #define BURST_HALF_TICKS_A    333U
 #define BURST_HALF_TICKS_B    334U
 
-#define BURST_CYCLES_MIN      5U
-#define BURST_CYCLES_MAX      10U
-#define BURST_CYCLES_DEFAULT  5U
-
-/* ePWM1 SOCA period. On the F28002x, EPWMCLK is FIXED at SYSCLK/2 = 50 MHz → one time-base tick = 20 ns.
- * 80 ticks → 1.6 µs → 625 kSps per channel.
- * Lower bound: the 4-SOC round robin per ADC needs ≈1.45 µs (15-SYSCLK
- * Sampling Window + ~210 ns (10.5 ADCCLK) conversions at ADCCLK = 50 MHz).  */
-#define EPWMCLK_TICK_NS            20U    /* EPWMCLK = SYSCLK/2, fixed       */
+/* ePWM1 SOCA period. EPWMCLK is FIXED at SYSCLK/2 = 50 MHz → 20 ns/tick.
+ * 80 ticks → 1.6 µs → 625 kSps per channel. Lower bound: the 4-SOC round
+ * robin per ADC needs ≈1.45 µs.                                            */
+#define EPWMCLK_TICK_NS            20U
 #define SAMPLE_PERIOD_EPWM_TICKS   80U
 #define SAMPLE_PERIOD_NS           (SAMPLE_PERIOD_EPWM_TICKS * EPWMCLK_TICK_NS)
 
-/* Samples per channel — MUST equal M24M01E_ASCAN_SAMPLES (EEPROM geometry). */
-#define WAVE_SAMPLES          M24M01E_ASCAN_SAMPLES         /* 512           */
-#define WAVE_CHANNELS         M24M01E_ASCAN_CHANNELS        /* 8             */
+#define WAVE_SAMPLES          NDT_ASCAN_SAMPLES
+#define WAVE_CHANNELS         NDT_ASCAN_CHANNELS
 
 #define HV_SETTLE_US          500U
 #define CPUTIMER_NS_PER_TICK  10U      /* CPU Timer 0, prescaler 0, 100 MHz  */
+#define MS_TICK_PERIOD        (DEVICE_SYSCLK_FREQ / 1000UL)  /* Timer 1      */
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Voltage-tap monitoring
@@ -186,23 +185,33 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Shared state
+ *
+ * Concurrency note: every write below happens in main-loop context. The I2CB
+ * ISR only reads these buffers (through the descriptor it was given), so the
+ * read-modify-write on g_statusFlags has a single writer and needs no guard.
+ * Keep it that way when adding features.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* A-scan waveform buffer, channel-major: g_waveBuf[ch][sample].
- * 4096 words = 8 KB — one third of the F28002x's 24 KB SRAM.               */
+/* A-scan waveform buffer, channel-major: g_waveBuf[ch][sample]. 8 KB. */
 volatile uint16_t g_waveBuf[WAVE_CHANNELS][WAVE_SAMPLES];
 
 volatile uint16_t g_voltBuf[NUM_TAPS] = {0};
 volatile uint16_t g_statusFlags       = 0U;
 
-/* Header of the record currently in g_waveBuf (captured or loaded). */
-static m24m01e_ascan_hdr_t g_lastHdr;
-
 /* Pre-serialised 16-byte header stream for I2CB cmd 0x08 (byte values). */
-volatile uint16_t g_hdrStream[16] = {0};
+volatile uint16_t g_hdrStream[NDT_STORE_HDR_STREAM_LEN] = {0};
+
+/* Header of the record currently in g_waveBuf (captured or loaded). */
+static ndt_ascan_hdr_t g_lastHdr;
 
 /* Configurable excitation burst length (I2CB cmd 0x02). */
-volatile uint16_t g_burstCycles = BURST_CYCLES_DEFAULT;
+static uint16_t g_burstCycles = NDT_BURST_CYCLES_DEFAULT;
+
+/* Fire moment → first-sample delay of the current record, in ns. */
+static uint32_t g_startDelayNs = 0U;
+
+/* Millisecond tick, incremented by the CPU Timer 1 ISR. */
+static volatile uint32_t g_msTicks = 0U;
 
 static const uint16_t g_tapExpected[NUM_TAPS] = {
     MV_TO_COUNTS(2912U), MV_TO_COUNTS(1714U), MV_TO_COUNTS(1750U),
@@ -217,48 +226,16 @@ static const uint16_t g_tapSoc[NUM_TAPS] = {
     ADC_SOC_NUMBER7, ADC_SOC_NUMBER8
 };
 
-typedef enum {
-    NDT_IDLE,           /* waiting for a command via I2CB                    */
-    NDT_FIRE,           /* 0x01 received; check rails, burst, capture        */
-    NDT_DATA_READY,     /* record complete; housekeeping then back to IDLE   */
-    NDT_EEPROM_OP,      /* save/load requested; executed in main loop        */
-    NDT_THERMAL_FAULT,  /* MAX14808 over-temperature — HV locked until reset */
-    NDT_VOLTAGE_FAULT   /* supply rail(s) out of range — scan blocked        */
-} NDT_State;
-
-volatile NDT_State g_ndtState = NDT_IDLE;
-
-/* EEPROM operation request (set by I2CB ISR, executed in main loop). */
-typedef enum { EE_NONE = 0, EE_SAVE, EE_LOAD } EE_Op;
-volatile EE_Op    g_eeOp = EE_NONE;
-volatile uint16_t g_eeId = 0U;
-
-/* Fire moment → first-sample delay of the current record, in ns. */
-static volatile uint32_t g_startDelayNs = 0U;
-
-/* ── I2CB slave stream state ─────────────────────────────────────────────── */
-volatile uint16_t g_i2cTxPtr = 0U;   /* byte index into the TX stream        */
-
-typedef enum {
-    I2C_READ_STATUS = 0,  /*  2 bytes: status-flag word                      */
-    I2C_READ_TAPS,        /* 10 bytes: raw voltage-tap counts                */
-    I2C_READ_WAVE,        /* WAVE_SAMPLES×2 bytes: one channel's waveform    */
-    I2C_READ_HDR          /* 16 bytes: current record header summary         */
-} I2C_ReadSel;
-volatile I2C_ReadSel g_i2cReadSel = I2C_READ_STATUS;
-volatile uint16_t    g_waveCh     = 0U;   /* channel selected by cmd 0x04    */
-
-/* Multi-byte command parser (RX side). */
-static volatile uint16_t s_rxCmd    = 0U;
-static volatile uint16_t s_rxNeed   = 0U;
-static volatile uint16_t s_rxGot    = 0U;
-static volatile uint16_t s_rxPar[2] = {0U, 0U};
-
 /* ═══════════════════════════════════════════════════════════════════════════
- * MAX14808 device handle and platform callbacks
+ * Device handles
  * ═══════════════════════════════════════════════════════════════════════════ */
 static max14808_dev_t g_pulser;
 static m24m01e_t      g_eeprom;
+static ndt_store_t    g_store;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * MAX14808 platform callbacks
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 static void ndt_gpio_write(uint32_t pin, uint32_t val)
 {
@@ -274,6 +251,28 @@ static void ndt_delay_us(uint32_t us)
 {
     DEVICE_DELAY_US(us);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Millisecond tick — CPU Timer 1 (INT13, not PIE-routed, so no ACK group)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+__interrupt void ndt_timer1ISR(void)
+{
+    g_msTicks++;
+    CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
+}
+
+/* 32-bit counter read on a 16-bit machine: retry until two reads agree, so a
+ * tick landing between the halves cannot produce a torn value. */
+static uint32_t ndt_millis(void)
+{
+    uint32_t a, b;
+    do { a = g_msTicks; b = g_msTicks; } while (a != b);
+    return a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Initialisation
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ─────────────────────────────────────────────────────────────────────────
  * NDT_initPulser — octal three-level mode (MODE0=1, MODE1=0)
@@ -309,11 +308,9 @@ static void NDT_initPulser(void)
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * NDT_initTimers — CPU Timer 0 free-running (timestamps, burst pacing)
- *                  and ePWM1 as the ADC sample-rate pacer (frozen at boot).
- *
- * ePWM1 is configured entirely here (no SysConfig instance, no pins):
- * Device_init()'s Device_enableAllPeripherals() has already clocked it.
+ * NDT_initTimers — CPU Timer 0 free-running (burst pacing, timestamps),
+ *                  CPU Timer 1 at 1 kHz (millisecond tick),
+ *                  ePWM1 as the ADC sample-rate pacer (frozen at boot).
  * ───────────────────────────────────────────────────────────────────────── */
 static void NDT_initTimers(void)
 {
@@ -325,8 +322,21 @@ static void NDT_initTimers(void)
     CPUTimer_reloadTimerCounter(CPUTIMER0_BASE);
     CPUTimer_startTimer(CPUTIMER0_BASE);
 
-    /* EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz.
-       */
+    /* CPU Timer 1: 1 ms periodic interrupt. The only work in its ISR is a
+     * 32-bit increment — the state machine needs a time base for periodic
+     * triggering and for blinking without blocking the loop. */
+    CPUTimer_setPeriod(CPUTIMER1_BASE, MS_TICK_PERIOD - 1UL);
+    CPUTimer_setPreScaler(CPUTIMER1_BASE, 0U);
+    CPUTimer_setEmulationMode(CPUTIMER1_BASE,
+                              CPUTIMER_EMULATIONMODE_RUNFREE);
+    CPUTimer_reloadTimerCounter(CPUTIMER1_BASE);
+    CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
+    CPUTimer_enableInterrupt(CPUTIMER1_BASE);
+    Interrupt_register(INT_TIMER1, &ndt_timer1ISR);
+    Interrupt_enable(INT_TIMER1);
+    CPUTimer_startTimer(CPUTIMER1_BASE);
+
+    /* EPWMCLK is hard-fixed at SYSCLK/2 = 50 MHz. */
     EPWM_setClockPrescaler(EPWM1_BASE, EPWM_CLOCK_DIVIDER_1,
                            EPWM_HSCLOCK_DIVIDER_1);   /* TBCLK = EPWMCLK    */
     EPWM_setTimeBasePeriod(EPWM1_BASE, SAMPLE_PERIOD_EPWM_TICKS - 1U);
@@ -345,7 +355,7 @@ static void NDT_initTimers(void)
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * NDT_initEeprom — WC pin low, transport bind, probe.
+ * NDT_initEeprom — WC pin low, transport bind, probe, record store bind.
  * A missing / failing EEPROM must not brick the scanner: on failure we set
  * STATUS_EEPROM_FAIL and carry on (scans still work, storage doesn't).
  * ───────────────────────────────────────────────────────────────────────── */
@@ -362,16 +372,35 @@ static void NDT_initEeprom(void)
     GPIO_writePin(PIN_EEPROM_WC, 0U);   /* writes enabled */
 
     if (m24m01e_init(&g_eeprom, &io, 0U) != M24M01E_OK ||
-        m24m01e_probe(&g_eeprom)         != M24M01E_OK)
+        m24m01e_probe(&g_eeprom)         != M24M01E_OK ||
+        ndt_store_init(&g_store, &g_eeprom) != NDT_STORE_OK)
     {
         g_statusFlags |= STATUS_EEPROM_FAIL;
     }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * tap_in_range / NDT_checkSupplies — unchanged: forces SOC4–8, polls the
- * ADCA INT2 flag (enabled in SysConfig but never PIE-registered).
+ * NDT_initSlave — bind the buffers the I2CB slave is allowed to serve.
  * ───────────────────────────────────────────────────────────────────────── */
+static void NDT_initSlave(void)
+{
+    const ndt_i2cb_streams_t streams = {
+        .status        = &g_statusFlags,
+        .taps          = g_voltBuf,
+        .tap_count     = NUM_TAPS,
+        .wave          = &g_waveBuf[0][0],
+        .wave_samples  = WAVE_SAMPLES,
+        .wave_channels = WAVE_CHANNELS,
+        .hdr_stream    = g_hdrStream,
+        .hdr_len       = NDT_STORE_HDR_STREAM_LEN
+    };
+    ndt_i2cb_init(&streams);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Acquisition
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
 static bool tap_in_range(uint16_t meas, uint16_t expected)
 {
     uint16_t margin = (uint16_t)(((uint32_t)expected * TAP_TOL_PCT) / 100U);
@@ -450,16 +479,11 @@ static void NDT_burst(uint16_t cycles)
 /* ─────────────────────────────────────────────────────────────────────────
  * NDT_captureRecord — continuous fixed-rate capture of all 8 channels.
  *
- * ePWM1 SOCA triggers ADCA SOC0–3 and ADCC SOC0–3 every 1.6 µs (SysConfig:
- * socXTrigger = EPWM1_SOCA). Each sweep completes in ≈1.45 µs; this loop
- * polls both INT1 flags (SOC3 EOC), stores the 8 results, and repeats for
- * WAVE_SAMPLES sweeps. Per-sweep CPU budget is 160 cycles — the store body
- * fits with margin at -O2, and the function runs from RAM (.TI.ramfunc) so
- * flash wait-states can't push it over.
- *
- * The ADC scan ISRs of the previous revision are gone: SysConfig no longer
- * PIE-registers ADC INT1, so the flags set in hardware without vectoring,
- * exactly like the INT2 tap poll.
+ * ePWM1 SOCA triggers ADCA SOC0–3 and ADCC SOC0–3 every 1.6 µs. Each sweep
+ * completes in ≈1.45 µs; this loop polls both INT1 flags (SOC3 EOC), stores
+ * the 8 results, and repeats for WAVE_SAMPLES sweeps. Per-sweep CPU budget
+ * is 160 cycles — the store body fits with margin at -O2, and the function
+ * runs from RAM (.TI.ramfunc) so flash wait-states can't push it over.
  * ───────────────────────────────────────────────────────────────────────── */
 #pragma CODE_SECTION(NDT_captureRecord, ".TI.ramfunc")
 static void NDT_captureRecord(void)
@@ -469,8 +493,7 @@ static void NDT_captureRecord(void)
     ADC_clearInterruptStatus(ADCA_BASE, ADC_INT_NUMBER1);
     ADC_clearInterruptStatus(ADCC_BASE, ADC_INT_NUMBER1);
 
-    /* Arm the pacer: counter to zero, then run. The first SOCA fires on the
-     * first zero event, i.e. effectively immediately.                       */
+    /* Arm the pacer: counter to zero, then run. */
     EPWM_setTimeBaseCounter(EPWM1_BASE, 0U);
     EPWM_setTimeBaseCounterMode(EPWM1_BASE, EPWM_COUNTER_MODE_UP);
 
@@ -495,62 +518,58 @@ static void NDT_captureRecord(void)
     EPWM_setTimeBaseCounterMode(EPWM1_BASE, EPWM_COUNTER_MODE_STOP_FREEZE);
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- * NDT_packHdrStream — serialise g_lastHdr into the 16-byte I2CB stream
- * for command 0x08 (all fields little-endian).
- * ───────────────────────────────────────────────────────────────────────── */
-static void NDT_packHdrStream(void)
+/* ═══════════════════════════════════════════════════════════════════════════
+ * State-machine hooks — the only surface ndt_sm.c sees of this board
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+static bool hook_thermal_fault(void)
 {
-    g_hdrStream[0]  = (uint16_t)( g_lastHdr.id                & 0xFFU);
-    g_hdrStream[1]  = (uint16_t)((g_lastHdr.id        >> 8U)  & 0xFFU);
-    g_hdrStream[2]  = (uint16_t)( g_lastHdr.seq               & 0xFFU);
-    g_hdrStream[3]  = (uint16_t)((g_lastHdr.seq       >> 8U)  & 0xFFU);
-    g_hdrStream[4]  = (uint16_t)((g_lastHdr.seq       >> 16U) & 0xFFU);
-    g_hdrStream[5]  = (uint16_t)((g_lastHdr.seq       >> 24U) & 0xFFU);
-    g_hdrStream[6]  = (uint16_t)( g_lastHdr.burst_cycles      & 0xFFU);
-    g_hdrStream[7]  = (uint16_t)((g_lastHdr.burst_cycles >> 8U) & 0xFFU);
-    g_hdrStream[8]  = (uint16_t)( g_lastHdr.samples_per_ch    & 0xFFU);
-    g_hdrStream[9]  = (uint16_t)((g_lastHdr.samples_per_ch >> 8U) & 0xFFU);
-    g_hdrStream[10] = (uint16_t)( g_lastHdr.sample_period_ns  & 0xFFU);
-    g_hdrStream[11] = (uint16_t)((g_lastHdr.sample_period_ns >> 8U) & 0xFFU);
-    g_hdrStream[12] = (uint16_t)( g_lastHdr.start_delay_ns          & 0xFFU);
-    g_hdrStream[13] = (uint16_t)((g_lastHdr.start_delay_ns >> 8U)   & 0xFFU);
-    g_hdrStream[14] = (uint16_t)((g_lastHdr.start_delay_ns >> 16U)  & 0xFFU);
-    g_hdrStream[15] = (uint16_t)((g_lastHdr.start_delay_ns >> 24U)  & 0xFFU);
+    /* MAX14808 THP: open-drain, active-low over-temp flag. */
+    return (GPIO_readPin(PIN_THP) == 0U);
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- * NDT_fireAndCapture — one complete A-scan:
+static bool hook_supplies_ok(void)
+{
+    uint16_t rails;
+
+    g_statusFlags &= ~(STATUS_DATA_VALID | STATUS_VOLTAGE_FAULT |
+                       STATUS_ALL_RAILS_OK);
+
+    rails = NDT_checkSupplies();
+    g_statusFlags |= rails;
+
+    return (rails & STATUS_ALL_RAILS_OK) == STATUS_ALL_RAILS_OK;
+}
+
+/* One complete A-scan:
  *   1. HV on, settle.
  *   2. t0 := now; N-cycle 150 kHz tone-burst.
  *   3. T/R switches to receive (~12 µs dead time in the driver).
  *   4. Measure actual t0 → capture-start delay (stored in the header).
  *   5. Continuous ePWM-paced capture of WAVE_SAMPLES per channel.
- * ───────────────────────────────────────────────────────────────────────── */
-static void NDT_fireAndCapture(void)
+ * The read side is frozen throughout, so a master read cannot observe a
+ * half-overwritten record. */
+static void hook_fire_and_capture(void)
 {
     uint32_t t_fire, t_cap;
 
-    /* ── 1. Enable HV supply and wait for VP/VN to stabilise ─────────────── */
+    ndt_i2cb_lock_tx(true);
+
     GPIO_writePin(PIN_PULSER_EN, 1U);
     DEVICE_DELAY_US(HV_SETTLE_US);
 
-    /* ── 2. Tone-burst (t = 0 for the record's time axis) ────────────────── */
     t_fire = CPUTimer_getTimerCount(CPUTIMER0_BASE);
     NDT_burst(g_burstCycles);
 
-    /* ── 3. Receive mode via driver (~12 µs dead time) ───────────────────── */
     max14808_enter_receive_mode(&g_pulser, true);
 
-    /* ── 4. Fire-to-first-sample delay (down-counter: elapsed = old - new) ─ */
+    /* Down-counter: elapsed = old - new. */
     t_cap = CPUTimer_getTimerCount(CPUTIMER0_BASE);
     g_startDelayNs = (uint32_t)(t_fire - t_cap) * CPUTIMER_NS_PER_TICK;
 
-    /* ── 5. Continuous capture ───────────────────────────────────────────── */
     NDT_captureRecord();
 
-    /* ── Record header for this capture ──────────────────────────────────── */
-    g_lastHdr.id               = 0U;              /* assigned on save (0x06) */
+    g_lastHdr.id               = 0U;          /* assigned on save (0x06) */
     g_lastHdr.seq              = 0U;
     g_lastHdr.burst_cycles     = g_burstCycles;
     g_lastHdr.freq_hz          = PZT_FREQ_HZ;
@@ -559,231 +578,112 @@ static void NDT_fireAndCapture(void)
     g_lastHdr.samples_per_ch   = WAVE_SAMPLES;
     g_lastHdr.channels         = WAVE_CHANNELS;
     g_lastHdr.status_flags     = g_statusFlags;
-    NDT_packHdrStream();
+    ndt_store_hdr_to_stream(&g_lastHdr, g_hdrStream);
+
+    ndt_i2cb_lock_tx(false);
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- * NDT_runEepromOp — executes the save/load requested over I2CB.
- * Runs in main-loop context; blocking (~0.3 s for a full save). The I2CB
- * slave stays serviceable throughout (its ISR keeps running), and the
- * master can watch STATUS_EEPROM_BUSY via cmd 0x03.
- * ───────────────────────────────────────────────────────────────────────── */
-static void NDT_runEepromOp(void)
+static void hook_after_capture(void)
 {
-    m24m01e_status_t st;
+    /* Restore MAX14808 octal-3L ready state (resets DINP/DINN). */
+    max14808_set_mode(&g_pulser, MAX14808_MODE_OCTAL_3LEVEL);
+
+    /* HV off until the next scan command. */
+    GPIO_writePin(PIN_PULSER_EN, 0U);
+
+    g_statusFlags |= STATUS_DATA_VALID;
+}
+
+static void hook_on_voltage_fault(void)
+{
+    g_statusFlags |= STATUS_VOLTAGE_FAULT;
+    GPIO_writePin(PIN_PULSER_EN, 0U);
+}
+
+static void hook_on_thermal_enter(void)
+{
+    g_statusFlags |= STATUS_THERMAL_FAULT;
+    GPIO_writePin(PIN_PULSER_EN, 0U);
+    max14808_set_mode(&g_pulser, MAX14808_MODE_TX_DISABLE);
+}
+
+static void hook_thermal_blink(void)
+{
+    GPIO_togglePin(PIN_MCU_LED);
+}
+
+static void hook_set_burst_cycles(uint16_t cycles)
+{
+    if (cycles < NDT_BURST_CYCLES_MIN) { cycles = NDT_BURST_CYCLES_MIN; }
+    if (cycles > NDT_BURST_CYCLES_MAX) { cycles = NDT_BURST_CYCLES_MAX; }
+    g_burstCycles = cycles;
+}
+
+static void hook_store_save(uint16_t id)
+{
+    ndt_store_status_t rc;
 
     g_statusFlags |=  STATUS_EEPROM_BUSY;
     g_statusFlags &= ~STATUS_EEPROM_FAIL;
 
-    if (g_eeOp == EE_SAVE)
+    if ((g_statusFlags & STATUS_DATA_VALID) != 0U)
     {
-        if ((g_statusFlags & STATUS_DATA_VALID) != 0U)
-        {
-            g_lastHdr.id = g_eeId;
-            st = m24m01e_ascan_save(&g_eeprom, &g_lastHdr,
-                                    (const uint16_t *)&g_waveBuf[0][0]);
-        }
-        else
-        {
-            st = M24M01E_ERR_PARAM;   /* nothing valid to save */
-        }
+        g_lastHdr.id = id;
+        rc = ndt_store_save(&g_store, &g_lastHdr,
+                            (const uint16_t *)&g_waveBuf[0][0]);
     }
-    else /* EE_LOAD */
+    else
     {
-        st = m24m01e_ascan_load(&g_eeprom, g_eeId, &g_lastHdr,
-                                (uint16_t *)&g_waveBuf[0][0]);
-        if (st == M24M01E_OK)
-        {
-            g_statusFlags |= STATUS_DATA_VALID;   /* buffer now holds record */
-        }
+        rc = NDT_STORE_ERR_PARAM;         /* nothing valid to save */
     }
 
-    if (st != M24M01E_OK)
+    if (rc != NDT_STORE_OK) { g_statusFlags |= STATUS_EEPROM_FAIL; }
+
+    ndt_store_hdr_to_stream(&g_lastHdr, g_hdrStream);   /* seq updated */
+    g_statusFlags &= ~STATUS_EEPROM_BUSY;
+}
+
+static void hook_store_load(uint16_t id)
+{
+    ndt_store_status_t rc;
+
+    g_statusFlags |=  STATUS_EEPROM_BUSY;
+    g_statusFlags &= ~(STATUS_EEPROM_FAIL | STATUS_DATA_VALID);
+
+    /* The load rewrites g_waveBuf page by page — freeze the read side. */
+    ndt_i2cb_lock_tx(true);
+    rc = ndt_store_load(&g_store, id, &g_lastHdr, (uint16_t *)&g_waveBuf[0][0]);
+    ndt_i2cb_lock_tx(false);
+
+    if (rc == NDT_STORE_OK)
+    {
+        g_statusFlags |= STATUS_DATA_VALID;
+    }
+    else
     {
         g_statusFlags |= STATUS_EEPROM_FAIL;
     }
-    NDT_packHdrStream();              /* seq/id updated by save; hdr by load */
 
+    ndt_store_hdr_to_stream(&g_lastHdr, g_hdrStream);
     g_statusFlags &= ~STATUS_EEPROM_BUSY;
-    g_eeOp = EE_NONE;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * I2CB ISR — slave interface to master MCU
- *   SDA = GPIO2 (chip pin 61),  SCL = GPIO3 (chip pin 60)
- * See the protocol table in the file header. Multi-byte commands are parsed
- * across consecutive RX_DATA_RDY events within one write transaction; a new
- * address match resets the parser.
- * ═══════════════════════════════════════════════════════════════════════════ */
-__interrupt void INT_myI2CB_ISR(void)
-{
-    uint32_t src = I2C_getInterruptSource(I2CB_BASE);
-
-    switch (src)
-    {
-        /* ── Address match: master opened a new transaction ─────────────── */
-        case I2C_INTSRC_ADDR_SLAVE:
-            g_i2cTxPtr = 0U;
-            s_rxNeed   = 0U;
-            s_rxGot    = 0U;
-            break;
-
-        /* ── Receive data ready: command byte or parameter byte ─────────── */
-        case I2C_INTSRC_RX_DATA_RDY:
-        {
-            uint16_t d = (uint16_t)(I2C_getData(I2CB_BASE) & 0x00FFU);
-
-            if (s_rxNeed == 0U)
-            {
-                /* First byte of a transaction: the command. */
-                switch (d)
-                {
-                    case 0x01U:                 /* trigger A-scan            */
-                        if (g_ndtState == NDT_IDLE)
-                        {
-                            g_ndtState = NDT_FIRE;
-                            GPIO_togglePin(PIN_MCU_LED);
-                        }
-                        break;
-
-                    case 0x02U:                 /* set burst cycles [n]      */
-                    case 0x04U:                 /* select wave channel [ch]  */
-                        s_rxCmd  = d;
-                        s_rxNeed = 1U;
-                        s_rxGot  = 0U;
-                        break;
-
-                    case 0x06U:                 /* save A-scan [idL][idH]    */
-                    case 0x07U:                 /* load A-scan [idL][idH]    */
-                        s_rxCmd  = d;
-                        s_rxNeed = 2U;
-                        s_rxGot  = 0U;
-                        break;
-
-                    case 0x03U:
-                        g_i2cReadSel = I2C_READ_STATUS;
-                        break;
-
-                    case 0x05U:
-                        g_i2cReadSel = I2C_READ_TAPS;
-                        break;
-
-                    case 0x08U:
-                        g_i2cReadSel = I2C_READ_HDR;
-                        break;
-
-                    default:
-                        /* Unknown command — ignored. */
-                        break;
-                }
-            }
-            else
-            {
-                /* Parameter byte of a multi-byte command. */
-                s_rxPar[s_rxGot++] = d;
-                if (s_rxGot >= s_rxNeed)
-                {
-                    s_rxNeed = 0U;
-                    switch (s_rxCmd)
-                    {
-                        case 0x02U:
-                        {
-                            uint16_t n = s_rxPar[0];
-                            if (n < BURST_CYCLES_MIN) n = BURST_CYCLES_MIN;
-                            if (n > BURST_CYCLES_MAX) n = BURST_CYCLES_MAX;
-                            g_burstCycles = n;
-                            break;
-                        }
-
-                        case 0x04U:
-                            g_waveCh     = (uint16_t)(s_rxPar[0] & 0x07U);
-                            g_i2cReadSel = I2C_READ_WAVE;
-                            break;
-
-                        case 0x06U:
-                        case 0x07U:
-                            if (g_ndtState == NDT_IDLE)
-                            {
-                                g_eeId  = (uint16_t)(s_rxPar[0] |
-                                          ((uint16_t)s_rxPar[1] << 8U));
-                                g_eeOp  = (s_rxCmd == 0x06U) ? EE_SAVE
-                                                             : EE_LOAD;
-                                g_ndtState = NDT_EEPROM_OP;
-                            }
-                            break;
-
-                        default:
-                            break;
-                    }
-                }
-            }
-            break;
-        }
-
-        /* ── Transmit data ready: master is reading the selected stream ──── */
-        case I2C_INTSRC_TX_DATA_RDY:
-        {
-            uint16_t txByte;
-            uint16_t len;
-
-            switch (g_i2cReadSel)
-            {
-                case I2C_READ_TAPS:
-                {
-                    uint16_t w = g_voltBuf[g_i2cTxPtr >> 1U];
-                    len    = (uint16_t)(NUM_TAPS * 2U);
-                    txByte = (g_i2cTxPtr & 1U)
-                             ? (uint16_t)(w >> 8U)
-                             : (uint16_t)(w & 0x00FFU);
-                    break;
-                }
-
-                case I2C_READ_WAVE:
-                {
-                    uint16_t w = g_waveBuf[g_waveCh][g_i2cTxPtr >> 1U];
-                    len    = (uint16_t)(WAVE_SAMPLES * 2U);
-                    txByte = (g_i2cTxPtr & 1U)
-                             ? (uint16_t)(w >> 8U)
-                             : (uint16_t)(w & 0x00FFU);
-                    break;
-                }
-
-                case I2C_READ_HDR:
-                    len    = 16U;
-                    txByte = g_hdrStream[g_i2cTxPtr];
-                    break;
-
-                case I2C_READ_STATUS:
-                default:
-                    len    = 2U;
-                    txByte = (g_i2cTxPtr & 1U)
-                             ? (uint16_t)(g_statusFlags >> 8U)
-                             : (uint16_t)(g_statusFlags & 0x00FFU);
-                    break;
-            }
-
-            I2C_putData(I2CB_BASE, txByte);
-
-            if (++g_i2cTxPtr >= len) { g_i2cTxPtr = 0U; }
-            break;
-        }
-
-        /* ── Stop condition: transaction complete ────────────────────────── */
-        case I2C_INTSRC_STOP_CONDITION:
-            g_i2cTxPtr = 0U;
-            s_rxNeed   = 0U;
-            break;
-
-        default:
-            /* TODO (future stage): NACK / arbitration-lost handling.        */
-            break;
-    }
-
-    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP8);
-}
+static const ndt_sm_hooks_t g_hooks = {
+    .millis           = ndt_millis,
+    .thermal_fault    = hook_thermal_fault,
+    .supplies_ok      = hook_supplies_ok,
+    .fire_and_capture = hook_fire_and_capture,
+    .after_capture    = hook_after_capture,
+    .on_voltage_fault = hook_on_voltage_fault,
+    .on_thermal_enter = hook_on_thermal_enter,
+    .thermal_blink    = hook_thermal_blink,
+    .store_save       = hook_store_save,
+    .store_load       = hook_store_load,
+    .set_burst_cycles = hook_set_burst_cycles
+};
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * main
+ * main — composition root: bring the hardware up, wire the modules, run.
  * ═══════════════════════════════════════════════════════════════════════════ */
 void main(void)
 {
@@ -792,10 +692,10 @@ void main(void)
     Interrupt_initVectorTable();
     Board_init();
 
-    /* ── 3. Timers: CPU Timer 0 free-running + ePWM1 sample pacer ─────────── */
+    /* 1. Timers: CPU Timer 0 free-running, Timer 1 = 1 kHz, ePWM1 pacer. */
     NDT_initTimers();
 
-    /* ── 4. Enable analogue front end + gain ──────────────────────────────── */
+    /* 2. Analogue front end + gain. */
     GPIO_writePin(PIN_ANALOG_EN, 1U);
     DEVICE_DELAY_US(500U);
     GPIO_writePin(PIN_AFE_GAIN_A1, 1U);
@@ -803,96 +703,25 @@ void main(void)
     GPIO_writePin(PIN_AFE_GAIN_B1, 1U);
     GPIO_writePin(PIN_AFE_GAIN_B2, 1U);
 
-    /* ── 5. Initialise MAX14808 pulser ────────────────────────────────────── */
+    /* 3. MAX14808 pulser. */
     NDT_initPulser();
 
-    /* ── 6. Initialise M24M01E EEPROM (non-fatal on failure) ──────────────── */
+    /* 4. EEPROM + record store (non-fatal on failure). */
     NDT_initEeprom();
 
-    /* ── 7. Enable CPU interrupts ─────────────────────────────────────────── */
+    /* 5. Wire the modules. Both must be ready before the first interrupt:
+     *    the I2CB ISR posts into the state machine's queue. */
+    ndt_sm_init(&g_hooks);
+    NDT_initSlave();
+
+    /* 6. Enable CPU interrupts. */
     Interrupt_enableGlobal();
 
-    /* ── 8. Status LED on — initialisation complete ───────────────────────── */
+    /* 7. Status LED on — initialisation complete. */
     GPIO_writePin(PIN_MCU_LED, 1U);
 
-    /* ══════════════════════════════════════════════════════════════════════
-     * Main loop — NDT state machine
-     *   NDT_IDLE          → poll THP; I2CB ISR advances state
-     *   NDT_FIRE          → check rails; burst + capture; → DATA_READY
-     *   NDT_DATA_READY    → restore pulser, HV off, DATA_VALID, → IDLE
-     *   NDT_EEPROM_OP     → run save/load; → IDLE
-     *   NDT_THERMAL_FAULT → HV off, outputs off, blink LED, latched
-     *   NDT_VOLTAGE_FAULT → HV off, → IDLE (master re-issues 0x01)
-     * ══════════════════════════════════════════════════════════════════════ */
     for (;;)
     {
-        switch (g_ndtState)
-        {
-            case NDT_IDLE:
-                /* MAX14808 THP: open-drain, active-low over-temp flag. */
-                if (GPIO_readPin(PIN_THP) == 0U)
-                {
-                    g_ndtState = NDT_THERMAL_FAULT;
-                }
-                break;
-
-            case NDT_FIRE:
-            {
-                uint16_t rails;
-
-                g_statusFlags &= ~(STATUS_DATA_VALID | STATUS_VOLTAGE_FAULT |
-                                   STATUS_ALL_RAILS_OK);
-
-                rails = STATUS_ALL_RAILS_OK; //NDT_checkSupplies(); //Temproray deactivate voltage taps
-                g_statusFlags |= rails;
-
-                if ((rails & STATUS_ALL_RAILS_OK) == STATUS_ALL_RAILS_OK)
-                {
-                    /* Blocking: burst + full continuous capture (~0.9 ms). */
-                    NDT_fireAndCapture();
-                    g_ndtState = NDT_DATA_READY;
-                }
-                else
-                {
-                    g_statusFlags |= STATUS_VOLTAGE_FAULT;
-                    g_ndtState     = NDT_VOLTAGE_FAULT;
-                }
-                break;
-            }
-
-            case NDT_DATA_READY:
-                /* Restore MAX14808 octal-3L ready state (resets DINP/DINN). */
-                max14808_set_mode(&g_pulser, MAX14808_MODE_OCTAL_3LEVEL);
-
-                /* HV off until the next scan command. */
-                GPIO_writePin(PIN_PULSER_EN, 0U);
-
-                g_statusFlags |= STATUS_DATA_VALID;
-                g_ndtState = NDT_IDLE;
-                break;
-
-            case NDT_EEPROM_OP:
-                NDT_runEepromOp();
-                g_ndtState = NDT_IDLE;
-                break;
-
-            case NDT_THERMAL_FAULT:
-                g_statusFlags |= STATUS_THERMAL_FAULT;
-                GPIO_writePin(PIN_PULSER_EN, 0U);
-                max14808_set_mode(&g_pulser, MAX14808_MODE_TX_DISABLE);
-
-                GPIO_togglePin(PIN_MCU_LED);
-                DEVICE_DELAY_US(100000U);
-                break;
-
-            case NDT_VOLTAGE_FAULT:
-                GPIO_writePin(PIN_PULSER_EN, 0U);
-                g_ndtState = NDT_IDLE;
-                break;
-
-            default:
-                g_ndtState = NDT_IDLE;
-                break;
-        }
+        ndt_sm_step();
     }
 }
