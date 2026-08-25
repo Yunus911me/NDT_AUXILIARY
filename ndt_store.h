@@ -17,8 +17,8 @@
  * Slot geometry (bytes in the EEPROM array):
  *
  *   ┌ slot k, base = k * NDT_STORE_SLOT_BYTES ────────────────────────────┐
- *   │ page 0     : header (magic, id, seq, time axis, checksum)          │
- *   │ page 1..N  : sample data, little-endian uint16, channel-major      │
+ *   │ page 0     : header (magic, id, seq, time axis, checksum)           │
+ *   │ page 1..N  : sample data, little-endian uint16, channel-major       │
  *   └─────────────────────────────────────────────────────────────────────┘
  *
  * Defaults: 8 ch x 512 samples -> 8192 data bytes -> 32 data pages

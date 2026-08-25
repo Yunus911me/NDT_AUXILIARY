@@ -16,8 +16,9 @@
 #include <stddef.h>
 #include "ndt_sm.h"
 
-#define QDEPTH  NDT_EVENT_QUEUE_DEPTH
-#define QMASK   (QDEPTH - 1u)
+#define QDEPTH  NDT_EVENT_QUEUE_DEPTH   /* QUEUE DEPTH */
+
+#define QMASK   (QDEPTH - 1u)   /* QUEUE MASK */ 
 
 #if (QDEPTH & QMASK) != 0u
 #error "NDT_EVENT_QUEUE_DEPTH must be a power of two"

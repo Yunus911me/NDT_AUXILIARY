@@ -1,17 +1,8 @@
 # NDT Auxiliary Board — Unit Test Specification
 
-**Project:** `NDT_AUXILIARY` — F280025 NDT Auxiliary Board Firmware
-**Document version:** 2.0
-**Status:** Draft — for review
-**Supersedes:** v1.0 (mixed unit / HIL / integration specification)
-
----
-
 ## 1. Scope
 
-This document specifies **unit tests only**. Every case here runs on a host compiler
-against a module compiled in isolation, with its dependencies replaced by fakes. No
-board, no debugger, no instruments, no I2C bus.
+This document specifies **unit tests only**.
 
 ### 1.1 In scope
 
@@ -21,7 +12,7 @@ board, no debugger, no instruments, no I2C bus.
 | `ndt_store.c` | Reaches the EEPROM only through `m24m01e_*` calls, which are themselves callback-driven. |
 | `m24m01e.c` | Reaches the bus only through `m24m01e_io_t` callbacks. |
 | `max14808.c` | Reaches the pins only through `gpio_write` / `gpio_read` / `delay_us` callbacks. |
-| `ndt_i2cb.c` | Needs a small `driverlib.h` / `device.h` shim (§3.5). Worth the shim — the RX parser and TX descriptor are where protocol bugs live. |
+| `ndt_i2cb.c` | Needs a small `driverlib.h` / `device.h`. the RX parser and TX descriptor are where protocol bugs live. |
 | `ndt_config.h`, `ndt_store.h` | Compile-time geometry assertions. |
 
 ### 1.2 Out of scope
@@ -38,16 +29,7 @@ Deliberately excluded, and **not** simply "not yet written":
 - Build/link properties (`.TI.ramfunc` placement, stack size, `-O2`, `.map` budget).
 
 Those belong in a separate HIL/integration specification. Where a unit test can only
-*partially* cover a requirement, §7 says so rather than implying full coverage.
-
-> **Note on v1.0.** The previous document was written against the pre-refactor
-> firmware and references symbols that no longer exist (`g_ndtState`, `g_eeOp`,
-> `EE_NONE`, `NDT_packHdrStream()`, `M24M01E_ASCAN_SAMPLES`), and asserts behaviour the
-> refactor changed — chiefly that `0x01`/`0x06`/`0x07` are *ignored* when the board is
-> busy. They are now **queued**. Cases I2C-19, STA-04, STA-05 and RBT-07 of v1.0 would
-> fail against current firmware for that reason, and are replaced here by
-> UT-SM-10…UT-SM-13.
-
+*partially* cover a requirement.
 ---
 
 ## 2. Test environment
@@ -57,36 +39,13 @@ Those belong in a separate HIL/integration specification. Where a unit test can 
 | Item | Requirement |
 |---|---|
 | Host compiler | GCC ≥ 9 or Clang ≥ 12, C99, `-Wall -Wextra -Werror` |
-| Test framework | Unity, or any xUnit-style C framework. Cases are framework-neutral. |
+| Test framework | Unity |
 | Coverage | `gcov` / `llvm-cov`, reported per module |
 | Sanitizers | `-fsanitize=address,undefined` on every run |
 | Static analysis | `cppcheck` and/or `clang-tidy`, using the existing `.clangd` |
 
-Suggested layout — no source file moves:
 
-```
-test/
-  fakes/        fake_hooks.c/h  fake_eeprom.c/h  fake_gpio.c/h  driverlib_stub.h
-  test_ndt_sm.c  test_ndt_store.c  test_m24m01e.c  test_max14808.c  test_ndt_i2cb.c
-  Makefile
-```
-
-### 2.2 The C28x / host type hazard
-
-On the C2000 target `uint8_t` is a **16-bit** container and `CHAR_BIT == 16`; on the
-host it is 8 bits. Both `ndt_store.c` and `m24m01e.c` mask every byte with `0xFF` on
-the way in and out specifically to be correct under both.
-
-Two consequences the suite must respect:
-
-1. Tests must never assert on `sizeof()`, on struct padding, or on raw byte counts
-   derived from `sizeof`. Assert on **values** and on **field positions** instead.
-2. A host pass does **not** prove the C28x build. UT-CFG-05 pins the masking
-   behaviour, and every fake stores bytes in a `uint16_t` array so that an unmasked
-   value ≥ 0x100 is visible as a failure rather than being silently truncated by the
-   host's 8-bit `uint8_t`.
-
-### 2.3 Fakes
+### 2.2 Fakes
 
 | Fake | Replaces | Capability |
 |---|---|---|
@@ -95,17 +54,6 @@ Two consequences the suite must respect:
 | `fake_store_dev` | `m24m01e_*` | Thin layer over `fake_eeprom`, so `ndt_store.c` is tested through the real chip driver (integration-flavoured but still hermetic) **and**, in a second configuration, against a link-time-substituted `m24m01e` mock for pure isolation. |
 | `fake_gpio` | MAX14808 pin callbacks | 64-pin shadow array, write-order log, programmable read values, `delay_us` accumulator. |
 | `driverlib_stub` | `I2C_*`, `Interrupt_*` | Records `I2C_putData()` bytes, feeds a scripted interrupt-source sequence to the ISR. |
-
-### 2.4 Conventions
-
-- **IDs:** `UT-<MOD>-nn`; MOD ∈ `SM` (state machine), `ST` (record store), `EE` (EEPROM
-  driver), `PU` (pulser), `IB` (I2CB protocol), `CFG` (compile-time).
-- **Priority:** P1 = safety or core correctness; P2 = important behaviour; P3 = hardening.
-- Every case is **hermetic**: no shared state between cases, no ordering dependency.
-  Each begins with a fresh `*_init()` and a cleared fake.
-- Builds under test: modules are compiled with the default `ndt_config.h` unless the
-  case names a variant (`CFG-PERIODIC`, `CFG-BOTH`, `CFG-CATCHUP`, `CFG-UNLATCHED`),
-  which is produced with a `-D` override.
 
 ---
 

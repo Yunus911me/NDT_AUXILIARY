@@ -1,10 +1,10 @@
 /**
  * @file  ndt_config.h
- * @brief Single place for every application-level policy knob.
+ * @brief Single place for every application-level policy.
  *
- * Nothing in this file touches registers. Hardware timing constants stay in
- * main.c (they are pin/clock facts); everything that is a *decision* lives
- * here, so re-targeting the board's behaviour is a rebuild, not a rewrite.
+ * Hardware timing constants stay in main.c (they are pin/clock facts);
+ * everything that is a *decision* lives here,
+ * so re-targeting the board's behaviour is a rebuild, not a rewrite.
  */
 
 #ifndef NDT_CONFIG_H
@@ -52,8 +52,7 @@
 /* Note on commanded triggers: I2CB commands are consumed only while the
  * machine is idle, so a command arriving mid-scan waits in the event queue
  * rather than being lost. It is dropped only if the queue is full — see
- * ndt_sm_dropped(). This differs from the pre-refactor firmware, which
- * ignored 0x01/0x06/0x07 outright unless the board was idle.              */
+ * ndt_sm_dropped().
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Fault policy

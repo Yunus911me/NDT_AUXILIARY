@@ -136,29 +136,6 @@ The F28002x has **24 KB SRAM total**  budget carefully:
 
 ---
 
-## Building
-
-Toolchain: **Code Composer Studio** with the C2000 compiler, **C2000Ware** driverlib for F28002x, and **SysConfig** (generates `board.c/h`).
-
-1. Import the CCS project; confirm the device is F280025.
-2. For a flash target, add the predefined symbol `_FLASH` (Project Properties → C2000 Compiler → Predefined Symbols). This makes `Device_init()` copy `.TI.ramfunc` to RAM and program flash wait-states. Omit `_FLASH` for a RAM-only debug target.
-3. Build with **`-O2`** the capture loop's 160-cycle-per-sweep budget assumes optimized code.
-4. Verify the linker `.cmd` provides the `.TI.ramfunc` LOAD/RUN mapping and ≥ 0x400-word stack.
-
-### SysConfig responsibilities (`Board_init()`)
-
-- **ADCA**: SOC0–3 scan (trigger = `EPWM1_SOCA`, INT1 flag **polled**, not PIE-registered); SOC4–8 voltage taps (software-forced, INT2 flag polled).
-- **ADCC**: SOC0–3 scan (trigger = `EPWM1_SOCA`, INT1 flag polled).
-- **GPIO**: all pulser DINP/DINN, control, status pins, `EEPROM_WC`.
-- **I2CB**: slave (target) mode @ address 0x21, interrupt registered.
-- **I2CA**: master @ 400 kHz, polled EEPROM transport.
-
-ePWM1 and both CPU timers are configured in C (`NDT_initTimers()`), not by
-SysConfig. CPU Timer 1's interrupt is registered directly with
-`Interrupt_register(INT_TIMER1, …)`; it is on INT13 and needs no PIE ACK.
-
----
-
 ## Hardware reference
 
 ### ADC channel map (`g_waveBuf` row index)
@@ -216,13 +193,3 @@ Pulser DINP/DINN channel pins and the derived GPIO write masks are documented at
 | `max14808.c/h` | driver | MAX14808 octal pulser: mode, current, T/R switching |
 | `board.c/h` | platform | SysConfig-generated peripheral init — do not hand-edit |
 
-Dependency direction is strictly downward, with one exception: `ndt_i2cb.c`
-calls `ndt_sm_post()` upward, which is a queue push rather than a call into
-board code. Full map in [Layers.md](Layers.md).
-
-### Adding to the project
-
-`ndt_config.h`, `ndt_sm.c/h`, `ndt_i2cb.c/h` and `ndt_store.c/h` are new files;
-add them to the CCS project alongside the existing sources. `m24m01e.c/h` lost
-its A-scan section to `ndt_store.c` and shrank accordingly; `i2ca_eeprom.c/h`
-and `max14808.c/h` are unchanged.
