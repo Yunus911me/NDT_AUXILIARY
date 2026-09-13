@@ -53,5 +53,10 @@
       "directory" : "C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/CPU1_RAM",
       "command"   : "clang++ -I\"C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY\" -I\"C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/device\" -I\"C:/ti/C2000Ware_26_01_00_00/driverlib/f28002x/driverlib/\" -I\"C:/ti/ti-cgt-c2000_22.6.0.LTS/include\" -DDEBUG -DRAM -I\"C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/CPU1_RAM/syscfg\" -DF28002x=1 -xc",
       "file"      : "C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/ndt_store.c"
+   },
+   {
+      "directory" : "C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/CPU1_RAM",
+      "command"   : "clang++ -I\"C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY\" -I\"C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/device\" -I\"C:/ti/C2000Ware_26_01_00_00/driverlib/f28002x/driverlib/\" -I\"C:/ti/ti-cgt-c2000_22.6.0.LTS/include\" -DDEBUG -DRAM -I\"C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/CPU1_RAM/syscfg\" -DF28002x=1 -xc",
+      "file"      : "C:/Users/ahmad/workspace_ccstheia/NDT_AUXILIARY/unity.c"
    }
 ]

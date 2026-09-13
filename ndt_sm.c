@@ -209,8 +209,7 @@ void ndt_sm_step(void)
             break;
 
         case NDT_ST_THERMAL_FAULT:
-            /* Non-blocking blink — the old DEVICE_DELAY_US(100000) froze the
-             * loop for 100 ms at a time, which also stalled command drain. */
+
             if (elapsed(s_lastBlinkMs, NDT_THERMAL_BLINK_MS)) {
                 s_lastBlinkMs = now_ms();
                 if (s_hk.thermal_blink != NULL) { s_hk.thermal_blink(); }
