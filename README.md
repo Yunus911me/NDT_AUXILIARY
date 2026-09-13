@@ -4,8 +4,7 @@ Firmware for a 150 kHz guided-wave ultrasonic collar (NDT auxiliary board) built
 
 The firmware is split into a policy layer (state machine, configuration), a
 board layer (pins, initialisation, acquisition), and three driver stacks
-(EEPROM, pulser, I2C slave). See **[Layers.md](Layers.md)** for the layer
-hierarchy and the dependency map before making changes.
+(EEPROM, pulser, I2C slave).
 
 ---
 
